@@ -17,9 +17,9 @@ import {
   AlertTriangle,
 } from 'lucide-react'
 
-
 import { useGameStore } from '../store/useGameStore'
 import { useVoiceCommand } from '../hooks/useVoiceCommand'
+import { radioSound } from '../utils/audioEffects'
 
 interface SidebarProps {
   fps: number
@@ -112,11 +112,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ fps }) => {
             <HelpCircle className="w-3.5 h-3.5" />
           </button>
           <button
-            onClick={() => {
-              import('../utils/audioEffects').then(({ radioSound }) => {
-                radioSound.playRogerBeep()
-              })
-            }}
+            onClick={() => radioSound.playRogerBeep()}
             className="p-1.5 rounded bg-gray-800/80 hover:bg-[#00ffaa]/20 text-[#00ffaa] border border-gray-700 transition-colors"
             title="Test VHF Radio Squelch & Roger Beep"
           >

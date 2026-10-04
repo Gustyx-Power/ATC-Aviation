@@ -11,11 +11,11 @@ const INITIAL_AIRCRAFTS: Aircraft[] = [
     airline: 'Garuda Indonesia',
     aircraftType: 'B738',
     squawk: '4201',
-    x: 180,
-    y: 220,
-    speed: 1.4,
-    heading: 105,
-    targetHeading: 105,
+    x: 160,
+    y: 240,
+    speed: 1.3,
+    heading: 95,
+    targetHeading: 95,
     altitude: 5000,
     targetAltitude: 5000,
     fuel: 98,
@@ -23,9 +23,9 @@ const INITIAL_AIRCRAFTS: Aircraft[] = [
     status: 'cruising',
     conflictWith: [],
     history: [
-      { x: 150, y: 212 },
-      { x: 165, y: 216 },
-      { x: 180, y: 220 },
+      { x: 130, y: 237 },
+      { x: 145, y: 238 },
+      { x: 160, y: 240 },
     ],
   },
   {
@@ -33,24 +33,25 @@ const INITIAL_AIRCRAFTS: Aircraft[] = [
     airline: 'Lion Air',
     aircraftType: 'A320',
     squawk: '5124',
-    x: 520,
-    y: 120,
-    speed: 1.3,
-    heading: 210,
-    targetHeading: 210,
-    altitude: 6000,
-    targetAltitude: 6000,
+    x: 640,
+    y: 480,
+    speed: 1.2,
+    heading: 315,
+    targetHeading: 315,
+    altitude: 7000,
+    targetAltitude: 7000,
     fuel: 94,
     waypoints: [],
     status: 'cruising',
     conflictWith: [],
     history: [
-      { x: 540, y: 85 },
-      { x: 530, y: 102 },
-      { x: 520, y: 120 },
+      { x: 660, y: 500 },
+      { x: 650, y: 490 },
+      { x: 640, y: 480 },
     ],
   },
 ]
+
 
 let frameCounter = 0
 let lastConflictSoundTime = 0
@@ -260,12 +261,15 @@ export const useGameStore = create<GameState>((set) => ({
           if (ac2.status === 'landing' && ac2.speed < 0.4) continue
 
           const dist = Math.hypot(ac1.x - ac2.x, ac1.y - ac2.y)
+          const altDiff = Math.abs(ac1.altitude - ac2.altitude)
 
-          if (dist < SEPARATION_LOSS_MIN) {
+          // ICAO Standards: Collision requires BOTH horizontal proximity (< 28px) AND vertical overlap (< 1000 ft)
+          // Plus 3-second grace period on startup
+          if (dist < SEPARATION_LOSS_MIN && altDiff < 1000 && frameCounter > 180) {
             collisionDetected = true
             collisionPair = [ac1, ac2]
             break
-          } else if (dist < CONFLICT_WARNING_MIN) {
+          } else if (dist < CONFLICT_WARNING_MIN && altDiff < 1000) {
             ac1.conflictWith = [...(ac1.conflictWith || []), ac2.id]
             ac2.conflictWith = [...(ac2.conflictWith || []), ac1.id]
             hasConflictWarning = true

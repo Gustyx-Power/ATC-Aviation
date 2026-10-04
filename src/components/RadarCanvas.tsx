@@ -63,13 +63,17 @@ export const RadarCanvas: React.FC = () => {
     let animationFrameId: number
 
     const render = () => {
-      const width = canvas.width
-      const height = canvas.height
+      const dpr = window.devicePixelRatio || 1
+      const width = canvas.clientWidth || canvas.width / dpr
+      const height = canvas.clientHeight || canvas.height / dpr
       const centerX = width / 2
       const centerY = height / 2
-      const radarRadius = Math.min(centerX, centerY) * 0.9
+      const radarRadius = Math.min(centerX, centerY) * 0.88
 
-      // Clear with dark cockpit radar background
+      // Reset matrix to identity and scale by DPR for crisp high-DPI retina rendering
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+
+      // Clear full radar viewport in logical coordinates
       ctx.fillStyle = '#060c15'
       ctx.fillRect(0, 0, width, height)
 
@@ -622,7 +626,7 @@ export const RadarCanvas: React.FC = () => {
     }
   }, [aircrafts, selectedAircraftId, gameOver, collisionPoint])
 
-  // Resize handler: updates canvas & syncs radar center to store
+  // Resize handler: updates canvas buffer & syncs radar center to store
   useEffect(() => {
     const handleResize = () => {
       const canvas = canvasRef.current
@@ -631,15 +635,10 @@ export const RadarCanvas: React.FC = () => {
 
       const rect = container.getBoundingClientRect()
       const dpr = window.devicePixelRatio || 1
-      canvas.width = rect.width * dpr
-      canvas.height = rect.height * dpr
+      canvas.width = Math.round(rect.width * dpr)
+      canvas.height = Math.round(rect.height * dpr)
       canvas.style.width = `${rect.width}px`
       canvas.style.height = `${rect.height}px`
-
-      const ctx = canvas.getContext('2d')
-      if (ctx) {
-        ctx.scale(dpr, dpr)
-      }
 
       setRadarCenter({ x: rect.width / 2, y: rect.height / 2 })
     }
