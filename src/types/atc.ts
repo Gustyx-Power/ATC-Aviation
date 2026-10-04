@@ -3,27 +3,44 @@ export interface Waypoint {
   y: number;
 }
 
+export type AircraftStatus =
+  | 'at_gate'
+  | 'pushback'
+  | 'taxiing'
+  | 'holding'
+  | 'takeoff'
+  | 'airborne'
+  | 'cruising'
+  | 'approach'
+  | 'landing'
+  | 'emergency';
+
 export interface Aircraft {
   id: string;              // e.g., "GIA123"
   x: number;
   y: number;
-  speed: number;           // pixels per frame (1.2 to 2.5)
-  heading: number;         // 0-360 degrees (0 = North, 90 = East, 180 = South, 270 = West)
-  altitude: number;        // in feet, e.g. 2000 - 8000
+  speed: number;           // pixels per frame (1.2 to 2.5) or knots
+  heading: number;         // 0-360 degrees
+  altitude: number;        // in feet, e.g. 0 - 8000
   fuel: number;            // 0-100%
   waypoints: Waypoint[];   // Array of points from 'Draw Path'
-  status: 'cruising' | 'landing' | 'emergency';
+  status: AircraftStatus;
   
-  // Tactical data & Phase 4 extensions
+  // Tactical data & 3D Tower extensions
   airline?: string;
   aircraftType?: string;
   squawk?: string;
   targetHeading?: number;
   targetAltitude?: number;
   targetSpeed?: number;
-  history?: { x: number; y: number }[]; // Phosphor persistence trail
-  conflictWith?: string[];              // IDs of nearby aircraft (loss of separation warning)
-  landingProgress?: number;             // Rollout progress on runway
+  history?: { x: number; y: number }[];
+  conflictWith?: string[];
+  landingProgress?: number;
+  gate?: string;            // e.g., "Stand 1", "Stand 2"
+  destination?: string;     // e.g., "DPS / Bali", "SUB / Surabaya"
+  pos3d?: { x: number; y: number; z: number };
+  rot3d?: { pitch: number; yaw: number; roll: number };
+  phaseProgress?: number;   // 0 to 1 progress for pushback / taxiing animations
 }
 
 export interface Runway {
@@ -47,10 +64,15 @@ export interface CommLogItem {
   type: 'info' | 'command' | 'ack' | 'alert';
 }
 
+export type ViewMode = 'tower' | 'binoculars' | 'follow' | 'radar2d';
+export type RadioChannel = 'approach' | 'tower' | 'ground' | 'clearance' | 'stand';
+
 export interface GameState {
   aircrafts: Aircraft[];
   score: number;
   landedCount: number;
+  airMiles: number;
+  airportLevel: number;
   survivalTime: number;    // seconds survived
   gameOver: boolean;
   gameOverReason?: string;
@@ -62,12 +84,22 @@ export interface GameState {
   commsLog: CommLogItem[];
   micActive: boolean;
 
-  // Actions required by PRD
+  // 3D Tower & Roblox HUD state
+  viewMode: ViewMode;
+  activeChannel: RadioChannel;
+  tutorialText: string;
+  tutorialActive: boolean;
+  weather: {
+    condition: string;
+    temp: number;
+    wind: string;
+    time: string;
+  };
+
+  // Actions
   addAircraft: (aircraft: Aircraft) => void;
   updateAircrafts: () => void;
   setWaypoints: (id: string, path: Waypoint[]) => void;
-
-  // Additional control & Phase 4 actions
   spawnAircraft: () => void;
   setRadarCenter: (center: { x: number; y: number }) => void;
   setRadarDimensions: (center: { x: number; y: number }, radius: number) => void;
@@ -79,4 +111,15 @@ export interface GameState {
   togglePause: () => void;
   setMicActive: (active: boolean) => void;
   resetGame: () => void;
+
+  // Tower 3D Clearances & Commands (Roblox style)
+  orderPushback: (id: string) => void;
+  orderTaxi: (id: string) => void;
+  orderTakeoff: (id: string) => void;
+  orderHold: (id: string) => void;
+  orderClearedToLand: (id: string) => void;
+  orderGoAround: (id: string) => void;
+  setViewMode: (mode: ViewMode) => void;
+  setActiveChannel: (channel: RadioChannel) => void;
+  dismissTutorial: () => void;
 }

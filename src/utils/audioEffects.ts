@@ -168,6 +168,47 @@ class RadioSoundFX {
       // Ignore
     }
   }
+
+  /**
+   * Speak Pilot voice readback aloud through speakers with VHF radio effects
+   */
+  speakPilotVoice(text: string) {
+    // 1. Play opening radio squelch beep
+    this.playRogerBeep()
+
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return
+
+    try {
+      window.speechSynthesis.cancel()
+
+      const utterance = new SpeechSynthesisUtterance(text)
+      utterance.rate = 1.05
+      utterance.pitch = 0.95
+      utterance.volume = 1.0
+
+      // Find suitable Indonesian or English voice
+      const voices = window.speechSynthesis.getVoices()
+      const indonesianVoice = voices.find((v) => v.lang.startsWith('id') || v.name.includes('Indonesia'))
+      const englishMaleVoice = voices.find((v) => v.lang.startsWith('en') && (v.name.includes('David') || v.name.includes('Male') || v.name.includes('George') || v.name.includes('Natural')))
+      
+      if (indonesianVoice) {
+        utterance.voice = indonesianVoice
+        utterance.lang = 'id-ID'
+      } else if (englishMaleVoice) {
+        utterance.voice = englishMaleVoice
+        utterance.lang = 'en-US'
+      }
+
+      utterance.onend = () => {
+        // Radio mic unclick on transmission complete
+        this.playMicClick()
+      }
+
+      window.speechSynthesis.speak(utterance)
+    } catch {
+      // Fallback
+    }
+  }
 }
 
 export const radioSound = new RadioSoundFX()
