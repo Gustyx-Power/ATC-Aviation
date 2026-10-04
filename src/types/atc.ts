@@ -5,6 +5,7 @@ export interface Waypoint {
 
 export type AircraftStatus =
   | 'approach'
+  | 'holding_pattern'
   | 'landing'
   | 'taxi_to_gate'
   | 'at_gate'
@@ -14,6 +15,9 @@ export type AircraftStatus =
   | 'maintenance_check'
   | 'taxi_to_hangar'
   | 'in_hangar'
+  | 'overhaul'
+  | 'avionics_check'
+  | 'c_check'
   | 'boarding'
   | 'ready_pushback'
   | 'pushback'
@@ -23,6 +27,16 @@ export type AircraftStatus =
   | 'airborne'
   | 'cruising'
   | 'emergency';
+
+export type AssignedGate =
+  | 'Gate 1'
+  | 'Gate 2'
+  | 'Gate 3'
+  | 'Gate 4'
+  | 'Gate 5'
+  | 'Gate 6'
+  | 'Hangar 1'
+  | 'Hangar 2';
 
 export interface Aircraft {
   id: string;              // e.g., "GIA123"
@@ -45,13 +59,14 @@ export interface Aircraft {
   history?: { x: number; y: number }[];
   conflictWith?: string[];
   landingProgress?: number;
-  gate?: string;            // e.g., "Gate 1", "Gate 2", "Gate 3", "Hangar"
-  assignedGate?: 'Gate 1' | 'Gate 2' | 'Gate 3' | 'Hangar';
+  gate?: string;            // e.g., "Gate 1", "Gate 2", "Gate 3", "Hangar 1"
+  assignedGate?: AssignedGate;
   destination?: string;     // e.g., "DPS / Bali", "SUB / Surabaya"
   pos3d?: { x: number; y: number; z: number };
   rot3d?: { pitch: number; yaw: number; roll: number };
   phaseProgress?: number;   // 0 to 1 progress for animations
   serviceProgress?: number; // 0 to 100% for deboarding, cleaning, fueling, etc.
+  orbitAngle?: number;      // 0 to 2PI for holding pattern circling in air
   passengers?: { current: number; max: number };
   technicalHealth?: number; // 0 to 100%
   emergencyReason?: string; // e.g. "Kerusakan Mesin 1", "Bahan Bakar Kritis"
@@ -61,6 +76,15 @@ export interface Aircraft {
     refueled?: boolean;
     techInspected?: boolean;
     boarded?: boolean;
+    // Hangar maintenance flags
+    engineOverhauled?: boolean;
+    avionicsCalibrated?: boolean;
+    cCheckPassed?: boolean;
+  };
+  hangarService?: {
+    engineOverhauled?: boolean;
+    avionicsCalibrated?: boolean;
+    cCheckPassed?: boolean;
   };
 }
 
@@ -142,7 +166,7 @@ export interface GameState {
   resetGame: () => void;
 
   // Real Turnaround & Ground Operations Clearances
-  assignDestination: (id: string, destination: 'Gate 1' | 'Gate 2' | 'Gate 3' | 'Hangar') => void;
+  assignDestination: (id: string, destination: 'Gate 1' | 'Gate 2' | 'Gate 3' | 'Gate 4' | 'Gate 5' | 'Gate 6' | 'Hangar 1' | 'Hangar 2') => void;
   startDeboarding: (id: string) => void;
   startCabinService: (id: string) => void;
   startRefueling: (id: string) => void;
@@ -152,8 +176,16 @@ export interface GameState {
   orderTaxi: (id: string) => void;
   orderTakeoff: (id: string) => void;
   orderHold: (id: string) => void;
+  orderHoldInAir: (id: string) => void;
+  orderExitHolding: (id: string) => void;
   orderClearedToLand: (id: string) => void;
   orderGoAround: (id: string) => void;
+
+  // Hangar Maintenance Operations
+  startEngineOverhaul: (id: string) => void;
+  startAvionicsCheck: (id: string) => void;
+  startCCheck: (id: string) => void;
+  releaseFromHangar: (id: string, targetGate?: 'Gate 1' | 'Gate 2' | 'Gate 3' | 'Gate 4' | 'Gate 5' | 'Gate 6') => void;
 
   // Emergency & Weather
   triggerEmergency: (id?: string) => void;

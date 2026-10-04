@@ -219,28 +219,28 @@ export const Tower3DView: React.FC = () => {
     scene.add(holdLine)
 
     // ----------------------------------------------------
-    // 6. TERMINAL APRON, GATES 1-3, AND MAINTENANCE HANGAR
+    // 6. TERMINAL APRON (GATES 1-6) AND DUAL HANGAR FACILITY
     // ----------------------------------------------------
-    // Main Apron Concrete Pavement
-    const apronGeo = new THREE.PlaneGeometry(450, 180)
+    // Main Apron Concrete Pavement (Expanded for 6 Passenger Gates)
+    const apronGeo = new THREE.PlaneGeometry(620, 200)
     const apronMat = new THREE.MeshStandardMaterial({ color: 0x485260, roughness: 0.8 })
     const apron = new THREE.Mesh(apronGeo, apronMat)
     apron.rotation.x = -Math.PI / 2
-    apron.position.set(-120, 0.04, -40)
+    apron.position.set(-140, 0.04, -40)
     apron.receiveShadow = true
     scene.add(apron)
 
     // Terminal 1 Main Building (Modern Glass & Steel Architecture)
-    const terminalGeo = new THREE.BoxGeometry(320, 24, 60)
+    const terminalGeo = new THREE.BoxGeometry(450, 24, 60)
     const terminalMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.35, metalness: 0.3 })
     const terminal = new THREE.Mesh(terminalGeo, terminalMat)
-    terminal.position.set(-150, 12, 35)
+    terminal.position.set(-160, 12, 35)
     terminal.castShadow = true
     terminal.receiveShadow = true
     scene.add(terminal)
 
     // Terminal Blue Glass Facade
-    const glassGeo = new THREE.BoxGeometry(310, 16, 2)
+    const glassGeo = new THREE.BoxGeometry(440, 16, 2)
     const glassMat = new THREE.MeshStandardMaterial({
       color: 0x0f2942,
       roughness: 0.1,
@@ -249,69 +249,80 @@ export const Tower3DView: React.FC = () => {
       opacity: 0.75,
     })
     const glass = new THREE.Mesh(glassGeo, glassMat)
-    glass.position.set(-150, 12, 4)
+    glass.position.set(-160, 12, 4)
     scene.add(glass)
 
-    // 3 Telescopic Jetways for Gate 1, Gate 2, Gate 3
+    // 6 Telescopic Jetways for Gate 1 to Gate 6
     const GATE_POSITIONS = {
-      'Gate 1': { x: -230, z: -55 },
-      'Gate 2': { x: -150, z: -55 },
-      'Gate 3': { x: -70, z: -55 },
-      'Hangar': { x: 120, z: -40 },
+      'Gate 1': { x: -330, z: -55 },
+      'Gate 2': { x: -260, z: -55 },
+      'Gate 3': { x: -190, z: -55 },
+      'Gate 4': { x: -120, z: -55 },
+      'Gate 5': { x: -50, z: -55 },
+      'Gate 6': { x: 20, z: -55 },
     }
 
-    Object.entries(GATE_POSITIONS).forEach(([name, pos]) => {
-      if (name !== 'Hangar') {
-        // Jetway Bridge
-        const jetwayGeo = new THREE.BoxGeometry(8, 6, 28)
-        const jetwayMat = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.5 })
-        const jetway = new THREE.Mesh(jetwayGeo, jetwayMat)
-        jetway.position.set(pos.x, 7, -8)
-        jetway.castShadow = true
-        scene.add(jetway)
+    Object.values(GATE_POSITIONS).forEach((pos) => {
+      // Jetway Bridge
+      const jetwayGeo = new THREE.BoxGeometry(8, 6, 28)
+      const jetwayMat = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.5 })
+      const jetway = new THREE.Mesh(jetwayGeo, jetwayMat)
+      jetway.position.set(pos.x, 7, -8)
+      jetway.castShadow = true
+      scene.add(jetway)
 
-        // Gate Lead-in Yellow Line
-        const leadInGeo = new THREE.PlaneGeometry(3, 40)
-        const leadIn = new THREE.Mesh(leadInGeo, taxiYellowMat)
-        leadIn.rotation.x = -Math.PI / 2
-        leadIn.position.set(pos.x, 0.06, -38)
-        scene.add(leadIn)
+      // Gate Lead-in Yellow Line
+      const leadInGeo = new THREE.PlaneGeometry(3, 40)
+      const leadIn = new THREE.Mesh(leadInGeo, taxiYellowMat)
+      leadIn.rotation.x = -Math.PI / 2
+      leadIn.position.set(pos.x, 0.06, -38)
+      scene.add(leadIn)
 
-        // Red Stop Bar
-        const stopBarGeo = new THREE.PlaneGeometry(14, 1.2)
-        const stopBarMat = new THREE.MeshBasicMaterial({ color: 0xff3b30 })
-        const stopBar = new THREE.Mesh(stopBarGeo, stopBarMat)
-        stopBar.rotation.x = -Math.PI / 2
-        stopBar.position.set(pos.x, 0.07, pos.z)
-        scene.add(stopBar)
-      }
+      // Red Stop Bar
+      const stopBarGeo = new THREE.PlaneGeometry(14, 1.2)
+      const stopBarMat = new THREE.MeshBasicMaterial({ color: 0xff3b30 })
+      const stopBar = new THREE.Mesh(stopBarGeo, stopBarMat)
+      stopBar.rotation.x = -Math.PI / 2
+      stopBar.position.set(pos.x, 0.07, pos.z)
+      scene.add(stopBar)
     })
 
-    // MAINTENANCE HANGAR BUILDING (East of the terminal apron)
-    const hangarGeo = new THREE.BoxGeometry(110, 32, 90)
-    const hangarMat = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.6, metalness: 0.4 })
+    // DUAL-BAY MAINTENANCE HANGAR COMPLEX (East of Apron)
+    const hangarGeo = new THREE.BoxGeometry(150, 36, 110)
+    const hangarMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.6, metalness: 0.4 })
     const hangar = new THREE.Mesh(hangarGeo, hangarMat)
-    hangar.position.set(120, 16, 20)
+    hangar.position.set(150, 18, 30)
     hangar.castShadow = true
     hangar.receiveShadow = true
     scene.add(hangar)
 
-    // Open Hangar Bay Doors (Yellow interior work illumination)
-    const hangarInteriorGeo = new THREE.BoxGeometry(90, 24, 4)
-    const hangarInteriorMat = new THREE.MeshStandardMaterial({
-      color: 0x1e293b,
-      emissive: 0xffaa00,
-      emissiveIntensity: 0.25,
+    // Two High-Bay Maintenance Entrance Doors (Hangar 1 & Hangar 2)
+    const bayGeo = new THREE.BoxGeometry(55, 26, 4)
+    const bayMat = new THREE.MeshStandardMaterial({
+      color: 0x0f172a,
+      emissive: 0xf59e0b,
+      emissiveIntensity: 0.35,
     })
-    const hangarBay = new THREE.Mesh(hangarInteriorGeo, hangarInteriorMat)
-    hangarBay.position.set(120, 12, -24)
-    scene.add(hangarBay)
+    const bay1 = new THREE.Mesh(bayGeo, bayMat)
+    bay1.position.set(120, 13, -24)
+    scene.add(bay1)
 
-    // Hangar Taxiway Connector
-    const hangarTaxiGeo = new THREE.PlaneGeometry(30, 95)
+    const bay2 = new THREE.Mesh(bayGeo, bayMat)
+    bay2.position.set(180, 13, -24)
+    scene.add(bay2)
+
+    // Overhead Yellow Crane Gantry Beams inside Hangar
+    const craneBeamGeo = new THREE.BoxGeometry(130, 2.5, 3)
+    const craneMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.3 })
+    const craneBeam = new THREE.Mesh(craneBeamGeo, craneMat)
+    craneBeam.position.set(150, 26, -10)
+    scene.add(craneBeam)
+
+    // Hangar Taxiway Connector (Wide Dual Lane to Taxiway Alpha)
+    const hangarTaxiGeo = new THREE.PlaneGeometry(90, 95)
     const hangarTaxi = new THREE.Mesh(hangarTaxiGeo, taxiMat)
     hangarTaxi.rotation.x = -Math.PI / 2
-    hangarTaxi.position.set(120, 0.03, -75)
+    hangarTaxi.position.set(150, 0.03, -75)
     hangarTaxi.receiveShadow = true
     scene.add(hangarTaxi)
 

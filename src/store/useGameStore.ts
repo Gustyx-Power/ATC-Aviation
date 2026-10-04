@@ -6,6 +6,17 @@ import { radioSound } from '../utils/audioEffects'
 const DEFAULT_CENTER = { x: 450, y: 350 }
 const DEFAULT_RADIUS = 280
 
+export const GATE_COORDS: Record<string, { x: number; z: number }> = {
+  'Gate 1': { x: -330, z: -55 },
+  'Gate 2': { x: -260, z: -55 },
+  'Gate 3': { x: -190, z: -55 },
+  'Gate 4': { x: -120, z: -55 },
+  'Gate 5': { x: -50, z: -55 },
+  'Gate 6': { x: 20, z: -55 },
+  'Hangar 1': { x: 120, z: -25 },
+  'Hangar 2': { x: 180, z: -25 },
+}
+
 export const getInitialAircrafts = (
   center = DEFAULT_CENTER,
   radius = DEFAULT_RADIUS
@@ -28,7 +39,7 @@ export const getInitialAircrafts = (
     gate: 'Gate 1',
     assignedGate: 'Gate 1',
     destination: 'DPS / Bali',
-    pos3d: { x: -230, y: 0.1, z: -55 },
+    pos3d: { x: -330, y: 0.1, z: -55 },
     rot3d: { pitch: 0, yaw: 0, roll: 0 },
     phaseProgress: 0,
     serviceProgress: 0,
@@ -60,6 +71,7 @@ export const getInitialAircrafts = (
     waypoints: [],
     status: 'holding',
     gate: 'Gate 2',
+    assignedGate: 'Gate 2',
     destination: 'SUB / Surabaya',
     pos3d: { x: -600, y: 0.1, z: -205 },
     rot3d: { pitch: 0, yaw: Math.PI / 2, roll: 0 },
@@ -105,6 +117,43 @@ export const getInitialAircrafts = (
       refueled: false,
       techInspected: false,
       boarded: false,
+    },
+    history: [],
+    conflictWith: [],
+  },
+  {
+    id: 'BTK204',
+    airline: 'Batik Air',
+    aircraftType: 'B738',
+    squawk: '6215',
+    x: center.x + 80,
+    y: center.y + 60,
+    speed: 0,
+    heading: 180,
+    targetHeading: 180,
+    altitude: 0,
+    targetAltitude: 0,
+    fuel: 50,
+    waypoints: [],
+    status: 'in_hangar',
+    gate: 'Hangar 1',
+    assignedGate: 'Hangar 1',
+    destination: 'Maintenance & Service',
+    pos3d: { x: 120, y: 0.1, z: -25 },
+    rot3d: { pitch: 0, yaw: Math.PI, roll: 0 },
+    phaseProgress: 0,
+    serviceProgress: 0,
+    passengers: { current: 0, max: 180 },
+    technicalHealth: 72,
+    turnaround: {
+      deboarded: true,
+      cabinCleaned: true,
+      refueled: false,
+      techInspected: false,
+      boarded: false,
+      engineOverhauled: false,
+      avionicsCalibrated: false,
+      cCheckPassed: false,
     },
     history: [],
     conflictWith: [],
@@ -214,7 +263,7 @@ export const useGameStore = create<GameState>((set) => ({
   // ------------------------------------------------------------------
   // GROUND TURNAROUND & APRON MANAGEMENT OPERATIONS
   // ------------------------------------------------------------------
-  assignDestination: (id: string, destination: 'Gate 1' | 'Gate 2' | 'Gate 3' | 'Hangar') => {
+  assignDestination: (id: string, destination: 'Gate 1' | 'Gate 2' | 'Gate 3' | 'Gate 4' | 'Gate 5' | 'Gate 6' | 'Hangar 1' | 'Hangar 2') => {
     radioSound.playRogerBeep()
     const msg: CommLogItem = {
       id: `cmd-${Date.now()}`,
@@ -237,16 +286,18 @@ export const useGameStore = create<GameState>((set) => ({
     set((state) => ({
       aircrafts: state.aircrafts.map((ac) => {
         if (ac.id !== id) return ac
-        const targetStatus = destination === 'Hangar' ? 'taxi_to_hangar' : 'taxi_to_gate'
+        const isHangar = destination === 'Hangar 1' || destination === 'Hangar 2'
+        const targetStatus = isHangar ? 'taxi_to_hangar' : 'taxi_to_gate'
         return {
           ...ac,
           assignedGate: destination,
+          gate: destination,
           status: targetStatus,
           phaseProgress: 0,
         }
       }),
       commsLog: [...state.commsLog, msg, ack].slice(-50),
-      tutorialText: `${id} sedang taksi menuju ${destination}. Setelah merapat, lakukan layanan darat!`,
+      tutorialText: `${id} sedang taksi menuju ${destination}. Setelah merapat, lakukan operasional!`,
     }))
   },
 
@@ -521,8 +572,202 @@ export const useGameStore = create<GameState>((set) => ({
     pilotReadback(`Cleared to land Runway nol sembilan, ${id}`)
 
     set((state) => ({
+      aircrafts: state.aircrafts.map((ac) => {
+        if (ac.id !== id) return ac
+        if (ac.status === 'holding_pattern') {
+          return {
+            ...ac,
+            status: 'approach',
+            heading: 90,
+            pos3d: { x: -800, y: 100, z: -260 },
+          }
+        }
+        return ac
+      }),
       commsLog: [...state.commsLog, msg, ack].slice(-50),
       activeChannel: 'tower',
+    }))
+  },
+
+  orderHoldInAir: (id: string) => {
+    radioSound.playRogerBeep()
+    const msg: CommLogItem = {
+      id: `cmd-${Date.now()}`,
+      timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
+      sender: 'ATC',
+      callsign: id,
+      message: `${id}, all gates occupied. Enter holding pattern at waypoint ALPHA, maintain 4,000 feet.`,
+      type: 'command',
+    }
+    const ack: CommLogItem = {
+      id: `ack-${Date.now()}`,
+      timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
+      sender: 'PILOT',
+      callsign: id,
+      message: `Holding at ALPHA, FL040, ${id}.`,
+      type: 'ack',
+    }
+    pilotReadback(`${id}, roger, masuki holding pattern di waypoint ALPHA, pertahankan empat ribu kaki.`)
+
+    set((state) => ({
+      aircrafts: state.aircrafts.map((ac) =>
+        ac.id === id
+          ? {
+              ...ac,
+              status: 'holding_pattern',
+              altitude: 4000,
+              orbitAngle: 0,
+            }
+          : ac
+      ),
+      commsLog: [...state.commsLog, msg, ack].slice(-50),
+      tutorialText: `${id} sedang berputar-putar di holding pattern. Berangkatkan pesawat di gate untuk mengosongkan tempat!`,
+    }))
+  },
+
+  orderExitHolding: (id: string) => {
+    radioSound.playRogerBeep()
+    const msg: CommLogItem = {
+      id: `cmd-${Date.now()}`,
+      timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
+      sender: 'ATC',
+      callsign: id,
+      message: `${id}, leave holding pattern, turn heading 090, descend and intercept Runway 09 localizer.`,
+      type: 'command',
+    }
+    const ack: CommLogItem = {
+      id: `ack-${Date.now()}`,
+      timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
+      sender: 'PILOT',
+      callsign: id,
+      message: `Leaving holding, heading 090, intercepting Runway 09, ${id}.`,
+      type: 'ack',
+    }
+    pilotReadback(`${id}, keluar holding pattern, belok heading nol sembilan puluh, intercept Runway nol sembilan.`)
+
+    set((state) => ({
+      aircrafts: state.aircrafts.map((ac) =>
+        ac.id === id
+          ? {
+              ...ac,
+              status: 'approach',
+              heading: 90,
+              altitude: 2500,
+              pos3d: { x: -750, y: 140, z: -260 },
+            }
+          : ac
+      ),
+      commsLog: [...state.commsLog, msg, ack].slice(-50),
+      tutorialText: `${id} keluar holding pattern dan menuju final approach Runway 09. Berikan [Izin Mendarat]!`,
+    }))
+  },
+
+  startEngineOverhaul: (id: string) => {
+    radioSound.playRogerBeep()
+    pilotReadback(`${id}, teknisi hangar memulai pembongkaran dan overhaul mesin jet turbofan.`)
+
+    set((state) => ({
+      aircrafts: state.aircrafts.map((ac) =>
+        ac.id === id ? { ...ac, status: 'overhaul', serviceProgress: 0 } : ac
+      ),
+      commsLog: [
+        ...state.commsLog,
+        {
+          id: `overhaul-${Date.now()}`,
+          timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
+          sender: 'GROUND_CREW' as const,
+          callsign: id,
+          message: `Hangar engineering team started engine core teardown and turbine overhaul on ${id}.`,
+          type: 'info' as const,
+        },
+      ].slice(-50),
+      tutorialText: `Mesin ${id} sedang di-overhaul di hangar. Tunggu teknisi menyelesaikan pengetesan turbin!`,
+    }))
+  },
+
+  startAvionicsCheck: (id: string) => {
+    radioSound.playRogerBeep()
+    pilotReadback(`${id}, kalibrasi radar cuaca, transponder squawk, instrumen kokpit, dan autopilot dimulai.`)
+
+    set((state) => ({
+      aircrafts: state.aircrafts.map((ac) =>
+        ac.id === id ? { ...ac, status: 'avionics_check', serviceProgress: 0 } : ac
+      ),
+      commsLog: [
+        ...state.commsLog,
+        {
+          id: `avionics-${Date.now()}`,
+          timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
+          sender: 'GROUND_CREW' as const,
+          callsign: id,
+          message: `Avionics calibration and TCAS radar diagnostics in progress on ${id}.`,
+          type: 'info' as const,
+        },
+      ].slice(-50),
+      tutorialText: `Avionik ${id} sedang dikalibrasi di hangar. Tunggu diagnosa instrumen selesai!`,
+    }))
+  },
+
+  startCCheck: (id: string) => {
+    radioSound.playRogerBeep()
+    pilotReadback(`${id}, inspeksi struktural mendalam C-Check, hidrolik roda pendaratan, dan kemudi flap dimulai.`)
+
+    set((state) => ({
+      aircrafts: state.aircrafts.map((ac) =>
+        ac.id === id ? { ...ac, status: 'c_check', serviceProgress: 0 } : ac
+      ),
+      commsLog: [
+        ...state.commsLog,
+        {
+          id: `ccheck-${Date.now()}`,
+          timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
+          sender: 'GROUND_CREW' as const,
+          callsign: id,
+          message: `Heavy maintenance C-Check inspection, landing gear hydraulic actuator test on ${id}.`,
+          type: 'info' as const,
+        },
+      ].slice(-50),
+      tutorialText: `C-Check ${id} sedang berjalan. Struktur dan hidrolik pesawat sedang diuji tekanan!`,
+    }))
+  },
+
+  releaseFromHangar: (id: string, targetGate?: 'Gate 1' | 'Gate 2' | 'Gate 3' | 'Gate 4' | 'Gate 5' | 'Gate 6') => {
+    radioSound.playRogerBeep()
+    const gate = targetGate || 'Gate 3'
+    pilotReadback(`${id}, seluruh servis hangar tuntas, pesawat laik terbang seratus persen. Dirilis dan taksi menuju ${gate}.`)
+
+    set((state) => ({
+      aircrafts: state.aircrafts.map((ac) =>
+        ac.id === id
+          ? {
+              ...ac,
+              status: 'taxi_to_gate',
+              assignedGate: gate,
+              gate: gate,
+              technicalHealth: 100,
+              fuel: 100,
+              turnaround: {
+                deboarded: true,
+                cabinCleaned: true,
+                refueled: true,
+                techInspected: true,
+                boarded: false,
+              },
+            }
+          : ac
+      ),
+      commsLog: [
+        ...state.commsLog,
+        {
+          id: `release-${Date.now()}`,
+          timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
+          sender: 'GROUND_CREW' as const,
+          callsign: id,
+          message: `${id} released from maintenance hangar with 100% airworthiness certificate. Taxiing to ${gate}.`,
+          type: 'info' as const,
+        },
+      ].slice(-50),
+      tutorialText: `${id} telah dirilis dari hangar dan taksi ke ${gate}. Siap untuk boarding penumpang!`,
     }))
   },
 
@@ -662,10 +907,14 @@ export const useGameStore = create<GameState>((set) => ({
       let updatedComms = state.commsLog
 
       const GATE_COORDS: Record<string, { x: number; z: number }> = {
-        'Gate 1': { x: -230, z: -55 },
-        'Gate 2': { x: -150, z: -55 },
-        'Gate 3': { x: -70, z: -55 },
-        'Hangar': { x: 120, z: -25 },
+        'Gate 1': { x: -330, z: -55 },
+        'Gate 2': { x: -260, z: -55 },
+        'Gate 3': { x: -190, z: -55 },
+        'Gate 4': { x: -120, z: -55 },
+        'Gate 5': { x: -50, z: -55 },
+        'Gate 6': { x: 20, z: -55 },
+        'Hangar 1': { x: 120, z: -25 },
+        'Hangar 2': { x: 180, z: -25 },
       }
 
       const updatedAircrafts: Aircraft[] = state.aircrafts
@@ -836,9 +1085,57 @@ export const useGameStore = create<GameState>((set) => ({
             }
           }
 
+          // Phase: HOLDING PATTERN (Circling at FL035 above Fix Alpha)
+          if (status === 'holding_pattern') {
+            let orbit = (ac.orbitAngle || 0) + 0.010 * (state.simSpeed || 1)
+            if (orbit > Math.PI * 2) orbit -= Math.PI * 2
+            const orbitX = -500 + Math.cos(orbit) * 190
+            const orbitZ = -260 + Math.sin(orbit) * 90
+            const orbitHeading = Math.round((Math.atan2(-Math.sin(orbit) * 90, Math.cos(orbit) * 190) * 180) / Math.PI + 360) % 360
+            return {
+              ...ac,
+              orbitAngle: orbit,
+              heading: orbitHeading,
+              altitude: 3500,
+              pos3d: { x: orbitX, y: 95, z: orbitZ },
+            }
+          }
+
+          // Hangar Maintenance Stages: OVERHAUL, AVIONICS, C_CHECK
+          if (status === 'overhaul' || status === 'avionics_check' || status === 'c_check') {
+            const stepRate = 0.08 * (state.simSpeed || 1)
+            if (serviceProg < 100) {
+              serviceProg = Math.min(100, serviceProg + stepRate)
+              return { ...ac, serviceProgress: serviceProg }
+            } else {
+              const completedService = status
+              status = 'in_hangar'
+              const turnaround = {
+                ...(ac.turnaround || {}),
+                engineOverhauled: completedService === 'overhaul' ? true : ac.turnaround?.engineOverhauled,
+                avionicsCalibrated: completedService === 'avionics_check' ? true : ac.turnaround?.avionicsCalibrated,
+                cCheckPassed: completedService === 'c_check' ? true : ac.turnaround?.cCheckPassed,
+              }
+              radioSound.playRogerBeep()
+              const stepName = completedService === 'overhaul' ? 'Overhaul mesin' : completedService === 'avionics_check' ? 'Kalibrasi avionik' : 'Inspeksi C-Check'
+              pilotReadback(`${ac.id}, ${stepName} selesai dan lulus uji sistem.`)
+              const logMsg: CommLogItem = {
+                id: `hangar-done-${Date.now()}`,
+                timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
+                sender: 'GROUND_CREW' as const,
+                callsign: ac.id,
+                message: `${stepName} completed on ${ac.id}. Systems verified 100% operational.`,
+                type: 'info' as const,
+              }
+              updatedComms = [...updatedComms, logMsg]
+              return { ...ac, status: 'in_hangar', serviceProgress: 100, technicalHealth: 100, turnaround }
+            }
+          }
+
           // Phase: TAXI TO GATE OR HANGAR
           if (status === 'taxi_to_gate' || status === 'taxi_to_hangar') {
-            const destName = ac.assignedGate || (status === 'taxi_to_hangar' ? 'Hangar' : 'Gate 1')
+            const isHangar = status === 'taxi_to_hangar' || (ac.assignedGate && ac.assignedGate.startsWith('Hangar'))
+            const destName = ac.assignedGate || (isHangar ? 'Hangar 1' : 'Gate 1')
             const targetPos = GATE_COORDS[destName] || GATE_COORDS['Gate 1']
 
             // 1. Move along taxiway towards target X
@@ -859,12 +1156,12 @@ export const useGameStore = create<GameState>((set) => ({
               heading = 180
             } else {
               // Arrived at Gate or Hangar!
-              status = destName === 'Hangar' ? 'in_hangar' : 'at_gate'
+              status = isHangar ? 'in_hangar' : 'at_gate'
               pos = { x: targetPos.x, y: 0.1, z: targetPos.z }
-              heading = destName === 'Hangar' ? 180 : 0
+              heading = isHangar ? 180 : 0
             }
 
-            return { ...ac, status, pos3d: pos, heading }
+            return { ...ac, status, pos3d: pos, heading, gate: destName }
           }
 
           // Phase: PUSHBACK
@@ -992,9 +1289,23 @@ export const useGameStore = create<GameState>((set) => ({
             // Decelerated at exit Bravo (X = -80)
             if (pos.x >= -80) {
               status = 'taxi_to_gate'
-              ac.assignedGate = 'Gate 1'
+              // Find first vacant gate among Gate 1 to Gate 6
+              const occupiedGates = new Set(
+                state.aircrafts.filter((a) => a.id !== ac.id).map((a) => a.assignedGate || a.gate).filter(Boolean)
+              )
+              const candidateGates: ('Gate 1' | 'Gate 2' | 'Gate 3' | 'Gate 4' | 'Gate 5' | 'Gate 6')[] = [
+                'Gate 1',
+                'Gate 2',
+                'Gate 3',
+                'Gate 4',
+                'Gate 5',
+                'Gate 6',
+              ]
+              const vacant = candidateGates.find((g) => !occupiedGates.has(g)) || 'Gate 1'
+              const assigned = ac.assignedGate || vacant
               pos = { x: -80, y: 0.1, z: -195 }
               heading = 0
+              return { ...ac, status: 'taxi_to_gate', assignedGate: assigned, gate: assigned, pos3d: pos, heading }
             }
             return { ...ac, status, pos3d: pos, heading }
           }
@@ -1002,9 +1313,38 @@ export const useGameStore = create<GameState>((set) => ({
           return ac
         })
         .filter((ac) => {
-          if (ac.pos3d && ac.pos3d.x > 2200) return false
+          if (ac.pos3d && ac.pos3d.x > 1400) return false
           return true
         })
+
+      // Continuous Realistic Inbound Traffic Generator
+      const inboundPlanes = updatedAircrafts.filter((a) => a.status === 'approach' || a.status === 'holding_pattern')
+      const spawnInterval = Math.round(1500 / (state.simSpeed || 1)) // Every ~25-30s at 1x
+      if (frameCounter % spawnInterval === 0 && updatedAircrafts.length < 6 && inboundPlanes.length < 2) {
+        const center = state.radarCenter || DEFAULT_CENTER
+        const radius = state.radarRadius || DEFAULT_RADIUS
+        const existingIds = updatedAircrafts.map((a) => a.id)
+        const incoming = generateRandomAircraft(center, radius, existingIds)
+        incoming.status = 'approach'
+        incoming.pos3d = { x: -960, y: 120, z: -260 }
+        incoming.altitude = 2500
+        incoming.heading = 90
+        incoming.destination = 'Inbound Runway 09'
+        incoming.passengers = { current: 155, max: 180 }
+        incoming.fuel = 45 + Math.floor(Math.random() * 25)
+
+        const checkInMsg: CommLogItem = {
+          id: `inbound-${Date.now()}`,
+          timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
+          sender: 'PILOT',
+          callsign: incoming.id,
+          message: `Jakarta Tower, ${incoming.airline} ${incoming.id.replace(/\D/g, '')} inbound, passing 2,500ft, requesting gate and landing clearance.`,
+          type: 'info',
+        }
+        pilotReadback(`${incoming.id}, inbound, passing dua ribu lima ratus kaki, minta izin mendarat dan gate.`)
+        updatedComms = [...updatedComms, checkInMsg]
+        updatedAircrafts.push(incoming)
+      }
 
       return {
         aircrafts: updatedAircrafts,
