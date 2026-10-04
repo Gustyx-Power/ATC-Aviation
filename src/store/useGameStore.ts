@@ -100,10 +100,10 @@ export const getInitialAircrafts = (
     squawk: '3110',
     x: center.x - radius * 0.7,
     y: center.y,
-    speed: 1.4,
+    speed: 1.3,
     heading: 90,
     targetHeading: 90,
-    altitude: 1200,
+    altitude: 2600,
     targetAltitude: 0,
     fuel: 35,
     waypoints: [],
@@ -112,7 +112,7 @@ export const getInitialAircrafts = (
     isClearedToLand: false,
     pendingClearance: 'landing',
     pendingClearanceTitle: 'Izin Mendarat Runway 09',
-    pos3d: { x: -850, y: 80, z: -260 },
+    pos3d: { x: -1500, y: 140, z: -260 },
     rot3d: { pitch: 0.05, yaw: -Math.PI / 2, roll: 0 },
     phaseProgress: 0,
     serviceProgress: 0,
@@ -377,6 +377,8 @@ export const useGameStore = create<GameState>((set, get) => ({
           assignedGate: destination,
           gate: destination,
           status: targetStatus,
+          pendingClearance: undefined,
+          pendingClearanceTitle: undefined,
           phaseProgress: 0,
         }
       }),
@@ -658,18 +660,22 @@ export const useGameStore = create<GameState>((set, get) => ({
     set((state) => ({
       aircrafts: state.aircrafts.map((ac) => {
         if (ac.id !== id) return ac
-        if (ac.status === 'holding_pattern') {
-          return {
-            ...ac,
-            status: 'approach',
-            heading: 90,
-            pos3d: { x: -800, y: 100, z: -260 },
-          }
+        const wasInHolding = ac.status === 'holding_pattern'
+        return {
+          ...ac,
+          status: 'approach',
+          isClearedToLand: true,
+          pendingClearance: undefined,
+          pendingClearanceTitle: undefined,
+          heading: 90,
+          targetHeading: 90,
+          pos3d: wasInHolding ? { x: -1500, y: 140, z: -260 } : ac.pos3d,
+          altitude: wasInHolding ? 2600 : ac.altitude,
         }
-        return ac
       }),
       commsLog: [...state.commsLog, msg, ack].slice(-50),
       activeChannel: 'tower',
+      tutorialText: `${id} telah menerima izin mendarat Runway 09. Pantau glideslope dan pendaratan!`,
     }))
   },
 
@@ -680,7 +686,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
       sender: 'ATC',
       callsign: id,
-      message: `${id}, all gates occupied. Enter holding pattern at waypoint ALPHA, maintain 4,000 feet.`,
+      message: `${id}, abort approach, climb and maintain FL035, enter holding pattern over airport.`,
       type: 'command',
     }
     const ack: CommLogItem = {
@@ -688,10 +694,10 @@ export const useGameStore = create<GameState>((set, get) => ({
       timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
       sender: 'PILOT',
       callsign: id,
-      message: `Holding at ALPHA, FL040, ${id}.`,
+      message: `Aborting approach, climbing to FL035 holding pattern, ${id}.`,
       type: 'ack',
     }
-    pilotReadback(`${id}, roger, masuki holding pattern di waypoint ALPHA, pertahankan empat ribu kaki.`)
+    pilotReadback(`Batalkan pendekatan, climb to FL035 masuk holding pattern, ${id}`)
 
     set((state) => ({
       aircrafts: state.aircrafts.map((ac) =>
@@ -699,13 +705,19 @@ export const useGameStore = create<GameState>((set, get) => ({
           ? {
               ...ac,
               status: 'holding_pattern',
-              altitude: 4000,
+              holdingReason: 'atc_order',
+              altitude: 3500,
               orbitAngle: 0,
+              isClearedToLand: false,
+              pendingClearance: 'landing',
+              pendingClearanceTitle: 'Izin Mendarat Runway 09',
+              pos3d: { x: -500, y: 95, z: -260 },
             }
           : ac
       ),
       commsLog: [...state.commsLog, msg, ack].slice(-50),
-      tutorialText: `${id} sedang berputar-putar di holding pattern. Berangkatkan pesawat di gate untuk mengosongkan tempat!`,
+      activeChannel: 'tower',
+      tutorialText: `${id} berputar di holding pattern. Berikan [Izin Mendarat] saat runway aman!`,
     }))
   },
 
@@ -716,7 +728,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
       sender: 'ATC',
       callsign: id,
-      message: `${id}, leave holding pattern, turn heading 090, descend and intercept Runway 09 localizer.`,
+      message: `${id}, leave holding pattern, turn heading 090, intercept localizer, Runway 09 cleared to land.`,
       type: 'command',
     }
     const ack: CommLogItem = {
@@ -724,10 +736,10 @@ export const useGameStore = create<GameState>((set, get) => ({
       timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
       sender: 'PILOT',
       callsign: id,
-      message: `Leaving holding, heading 090, intercepting Runway 09, ${id}.`,
+      message: `Leaving holding, heading 090, cleared to land Runway 09, ${id}.`,
       type: 'ack',
     }
-    pilotReadback(`${id}, keluar holding pattern, belok heading nol sembilan puluh, intercept Runway nol sembilan.`)
+    pilotReadback(`Keluar holding pattern, heading nol sembilan puluh, cleared to land Runway nol sembilan, ${id}`)
 
     set((state) => ({
       aircrafts: state.aircrafts.map((ac) =>
@@ -735,14 +747,19 @@ export const useGameStore = create<GameState>((set, get) => ({
           ? {
               ...ac,
               status: 'approach',
+              isClearedToLand: true,
+              pendingClearance: undefined,
+              pendingClearanceTitle: undefined,
               heading: 90,
-              altitude: 2500,
-              pos3d: { x: -750, y: 140, z: -260 },
+              targetHeading: 90,
+              altitude: 2600,
+              pos3d: { x: -1500, y: 140, z: -260 },
             }
           : ac
       ),
       commsLog: [...state.commsLog, msg, ack].slice(-50),
-      tutorialText: `${id} keluar holding pattern dan menuju final approach Runway 09. Berikan [Izin Mendarat]!`,
+      activeChannel: 'tower',
+      tutorialText: `${id} keluar holding dan intercept Runway 09. Izin mendarat telah disetujui!`,
     }))
   },
 
@@ -1471,12 +1488,12 @@ export const useGameStore = create<GameState>((set, get) => ({
 
           // Phase: FINAL APPROACH OR EMERGENCY LANDING
           if (status === 'approach' || status === 'emergency') {
-            const speed = status === 'emergency' ? 3.0 : 2.5
+            const speed = status === 'emergency' ? 2.2 : 1.3
             const targetTouchdownX = -580
             const newX = pos.x + speed
             const distToTouchdown = Math.max(0, targetTouchdownX - newX)
-            const newY = Math.max(0.2, distToTouchdown * 0.26)
-            altitude = Math.round(newY * 25)
+            const newY = Math.max(0.2, distToTouchdown * 0.15)
+            altitude = Math.round(newY * 20)
 
             pos = {
               x: newX,
@@ -1485,7 +1502,8 @@ export const useGameStore = create<GameState>((set, get) => ({
             }
 
             // CRITICAL CHECK: Approach without ATC Landing Clearance -> PULL UP TO HOLDING!
-            if (!isClearedToLand && status !== 'emergency' && newX >= -740) {
+            // Occurs only if reaching near runway threshold (newX >= -650) without ATC clearance!
+            if (!isClearedToLand && status !== 'emergency' && newX >= -650) {
               radioSound.playConflictAlert()
               pilotReadback(`${ac.id}, belum menerima izin mendarat dari ATC! Batalkan pendekatan, naik ke holding pattern FL035 berputar di atas bandara.`)
               const goAroundMsg: CommLogItem = {
@@ -1530,7 +1548,7 @@ export const useGameStore = create<GameState>((set, get) => ({
               updatedComms = [...updatedComms, touchdownMsg]
             }
 
-            return { ...ac, status, altitude, pos3d: pos }
+            return { ...ac, status, altitude, pos3d: pos, isClearedToLand }
           }
 
           // Phase: LANDING ROLLOUT
@@ -1540,30 +1558,42 @@ export const useGameStore = create<GameState>((set, get) => ({
               x: pos.x + 1.2,
               y: 0.2,
             }
-            // Decelerated at exit Bravo (X = -80) -> STOP & REQUEST GATE CLEARANCE!
+            // Decelerated at exit Bravo (X = -80) -> VACATE RUNWAY & TAXI TO VACANT GATE!
             if (pos.x >= -80) {
-              status = 'holding'
-              pos = { x: -80, y: 0.1, z: -195 }
+              const occupied = new Set(
+                state.aircrafts
+                  .filter((a) => a.id !== ac.id && a.status !== 'takeoff' && a.status !== 'airborne')
+                  .map((a) => a.assignedGate || a.gate)
+                  .filter(Boolean)
+              )
+              const vacantGate =
+                (['Gate 1', 'Gate 2', 'Gate 3', 'Gate 4', 'Gate 5', 'Gate 6'] as const).find(
+                  (g) => !occupied.has(g)
+                ) || 'Gate 2'
+
+              status = 'taxi_to_gate'
+              pos = { x: -80, y: 0.1, z: -135 }
               heading = 0
-              pendingClearance = 'taxi_to_gate'
-              pendingClearanceTitle = 'Alokasi Gate & Izin Taksi ke Apron'
-              pilotReadback(`${ac.id}, runway nol sembilan bebas di taxiway Bravo. Memohon alokasi gate dan izin taksi ke apron.`)
+              pilotReadback(`${ac.id}, runway nol sembilan bebas di taxiway Bravo. Melakukan taksi menuju ${vacantGate}.`)
               const vacateMsg: CommLogItem = {
                 id: `vacate-${Date.now()}`,
                 timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
                 sender: 'PILOT' as const,
                 callsign: ac.id,
-                message: `${ac.id}: Runway 09 vacated at Taxiway Bravo. Requesting gate assignment and taxi clearance.`,
+                message: `${ac.id}: Runway 09 vacated at Taxiway Bravo. Taxiing to ${vacantGate} via Alpha.`,
                 type: 'info' as const,
               }
               updatedComms = [...updatedComms, vacateMsg]
               return {
                 ...ac,
-                status: 'holding',
+                status: 'taxi_to_gate',
+                assignedGate: vacantGate,
+                gate: vacantGate,
                 pos3d: pos,
                 heading,
-                pendingClearance,
-                pendingClearanceTitle,
+                isClearedToLand: false,
+                pendingClearance: undefined,
+                pendingClearanceTitle: undefined,
               }
             }
             return { ...ac, status, pos3d: pos, heading }
@@ -1650,20 +1680,20 @@ export const useGameStore = create<GameState>((set, get) => ({
         } else {
           // APPROACH - REQUIRES ATC CLEARANCE TO LAND!
           incoming.status = 'approach'
-          incoming.pos3d = { x: -960, y: 120, z: -260 }
-          incoming.altitude = 2500
+          incoming.pos3d = { x: -1600, y: 150, z: -260 }
+          incoming.altitude = 2800
           incoming.heading = 90
           incoming.destination = 'Inbound Runway 09'
           incoming.isClearedToLand = false
           incoming.pendingClearance = 'landing'
           incoming.pendingClearanceTitle = 'Izin Mendarat Runway 09'
-          pilotReadback(`${incoming.id}, inbound passing dua ribu lima ratus kaki, memohon izin mendarat Runway nol sembilan.`)
+          pilotReadback(`${incoming.id}, inbound passing dua ribu delapan ratus kaki, memohon izin mendarat Runway nol sembilan.`)
           const checkInMsg: CommLogItem = {
             id: `inbound-${Date.now()}`,
             timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
             sender: 'PILOT',
             callsign: incoming.id,
-            message: `Jakarta Tower, ${incoming.airline} ${incoming.id.replace(/\D/g, '')} inbound, passing 2,500ft, requesting landing clearance.`,
+            message: `Jakarta Tower, ${incoming.airline} ${incoming.id.replace(/\D/g, '')} inbound, passing 2,800ft, requesting landing clearance.`,
             type: 'info',
           }
           updatedComms = [...updatedComms, checkInMsg]

@@ -4,6 +4,12 @@
 
 class RadioSoundFX {
   private ctx: AudioContext | null = null
+  private carrierGainNode: GainNode | null = null
+  private carrierNoiseNode: AudioBufferSourceNode | null = null
+  private carrierOsc1: OscillatorNode | null = null
+  private carrierOsc2: OscillatorNode | null = null
+  private isTransmitting = false
+  private carrierTimeout: ReturnType<typeof setTimeout> | null = null
 
   private getContext(): AudioContext | null {
     if (typeof window === 'undefined') return null
@@ -19,6 +25,123 @@ class RadioSoundFX {
       this.ctx.resume()
     }
     return this.ctx
+  }
+
+  /**
+   * Continuous VHF Radio Carrier Hiss + 400Hz Cockpit Alternator Hum Bed
+   * Recreates the authentic live airband background during pilot/ATC transmissions
+   */
+  startRadioCarrier() {
+    try {
+      const ctx = this.getContext()
+      if (!ctx || this.isTransmitting) return
+      this.isTransmitting = true
+
+      // Master carrier gain with quick fade-in
+      const masterGain = ctx.createGain()
+      masterGain.gain.setValueAtTime(0.001, ctx.currentTime)
+      masterGain.gain.exponentialRampToValueAtTime(0.045, ctx.currentTime + 0.04)
+
+      // 1. Airband VHF White/Pink Noise (Bandpass filtered 350Hz - 2900Hz)
+      const bufferSize = ctx.sampleRate * 2
+      const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate)
+      const output = noiseBuffer.getChannelData(0)
+      let b0 = 0, b1 = 0, b2 = 0
+      for (let i = 0; i < bufferSize; i++) {
+        const white = Math.random() * 2 - 1
+        b0 = 0.99765 * b0 + white * 0.099046
+        b1 = 0.963 * b1 + white * 0.14732
+        b2 = 0.57 * b2 + white * 0.55
+        output[i] = (b0 + b1 + b2 + white * 0.12) * 0.22
+      }
+
+      const noise = ctx.createBufferSource()
+      noise.buffer = noiseBuffer
+      noise.loop = true
+
+      const bandpass = ctx.createBiquadFilter()
+      bandpass.type = 'bandpass'
+      bandpass.frequency.setValueAtTime(1450, ctx.currentTime)
+      bandpass.Q.setValueAtTime(1.2, ctx.currentTime)
+
+      const highCut = ctx.createBiquadFilter()
+      highCut.type = 'highshelf'
+      highCut.frequency.setValueAtTime(2800, ctx.currentTime)
+      highCut.gain.setValueAtTime(-14, ctx.currentTime)
+
+      noise.connect(bandpass)
+      bandpass.connect(highCut)
+      highCut.connect(masterGain)
+      noise.start()
+      this.carrierNoiseNode = noise
+
+      // 2. Cockpit 400Hz Electrical Alternator Bus Whine (Cockpit headset signature)
+      const oscWhine = ctx.createOscillator()
+      const oscWhineGain = ctx.createGain()
+      oscWhine.type = 'sine'
+      oscWhine.frequency.setValueAtTime(400, ctx.currentTime)
+      oscWhineGain.gain.setValueAtTime(0.007, ctx.currentTime)
+      oscWhine.connect(oscWhineGain)
+      oscWhineGain.connect(masterGain)
+      oscWhine.start()
+      this.carrierOsc1 = oscWhine
+
+      // 3. Cockpit Jet Turbine Low-Frequency Drone (110Hz)
+      const oscDrone = ctx.createOscillator()
+      const oscDroneGain = ctx.createGain()
+      oscDrone.type = 'triangle'
+      oscDrone.frequency.setValueAtTime(110, ctx.currentTime)
+      oscDroneGain.gain.setValueAtTime(0.012, ctx.currentTime)
+      oscDrone.connect(oscDroneGain)
+      oscDroneGain.connect(masterGain)
+      oscDrone.start()
+      this.carrierOsc2 = oscDrone
+
+      masterGain.connect(ctx.destination)
+      this.carrierGainNode = masterGain
+    } catch {
+      // Ignore audio context errors
+    }
+  }
+
+  /**
+   * Stop VHF Carrier Bed and clean up audio graph
+   */
+  stopRadioCarrier() {
+    try {
+      if (this.carrierTimeout) {
+        clearTimeout(this.carrierTimeout)
+        this.carrierTimeout = null
+      }
+      if (!this.isTransmitting) return
+      this.isTransmitting = false
+
+      const ctx = this.getContext()
+      if (ctx && this.carrierGainNode) {
+        this.carrierGainNode.gain.setValueAtTime(this.carrierGainNode.gain.value, ctx.currentTime)
+        this.carrierGainNode.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.03)
+
+        setTimeout(() => {
+          try {
+            this.carrierNoiseNode?.stop()
+            this.carrierNoiseNode?.disconnect()
+            this.carrierOsc1?.stop()
+            this.carrierOsc1?.disconnect()
+            this.carrierOsc2?.stop()
+            this.carrierOsc2?.disconnect()
+            this.carrierGainNode?.disconnect()
+          } catch {
+            // Ignore
+          }
+          this.carrierNoiseNode = null
+          this.carrierOsc1 = null
+          this.carrierOsc2 = null
+          this.carrierGainNode = null
+        }, 40)
+      }
+    } catch {
+      // Ignore
+    }
   }
 
   /**
@@ -210,53 +333,90 @@ class RadioSoundFX {
   }
 
   /**
-   * Speak Pilot voice readback aloud through speakers with authentic VHF radio effects
+   * Convert aircraft flight numbers & aviation abbreviations to natural radio phonetics
+   */
+  private formatRadioPhonetics(text: string): string {
+    return text
+      .replace(/GIA123/gi, 'Garuda satu dua tiga')
+      .replace(/LNI456/gi, 'Lion Air empat lima enam')
+      .replace(/CTV789/gi, 'Citilink tujuh delapan sembilan')
+      .replace(/BTK204/gi, 'Batik Air dua nol empat')
+      .replace(/\bFL035\b/gi, 'Flight Level tiga puluh lima')
+      .replace(/\bFL050\b/gi, 'Flight Level lima puluh')
+      .replace(/\bRunway 09\b/gi, 'Runway nol sembilan')
+      .replace(/\bRunway 27\b/gi, 'Runway dua tujuh')
+  }
+
+  /**
+   * Speak Pilot voice readback aloud with authentic VHF radio carrier hiss,
+   * PTT squelch keying, deep cockpit pitch, and trailing roger chirp
    */
   speakPilotVoice(text: string) {
-    // 1. Play opening VHF squelch burst and roger chirp
-    this.playSquelchBurst(0.09)
-    setTimeout(() => this.playRogerBeep(), 40)
-
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) return
 
     try {
       window.speechSynthesis.cancel()
+      this.stopRadioCarrier()
 
-      const utterance = new SpeechSynthesisUtterance(text)
-      utterance.rate = 1.05
-      utterance.pitch = 0.92
+      // 1. Play opening PTT mic click & squelch burst
+      this.playMicClick()
+      this.playSquelchBurst(0.1)
+
+      // 2. Start continuous VHF carrier noise bed
+      this.startRadioCarrier()
+
+      const spokenText = this.formatRadioPhonetics(text)
+      const utterance = new SpeechSynthesisUtterance(spokenText)
+
+      // Authentic cockpit radio voice parameters:
+      // Deep authoritative pitch (0.78), brisk ATC radio cadence (1.16)
+      utterance.pitch = 0.78
+      utterance.rate = 1.16
       utterance.volume = 1.0
 
-      // Find suitable Indonesian or English voice
+      // Select best male cockpit pilot voice if available
       const voices = window.speechSynthesis.getVoices()
-      const indonesianVoice = voices.find((v) => v.lang.startsWith('id') || v.name.includes('Indonesia'))
-      const englishMaleVoice = voices.find(
-        (v) =>
-          v.lang.startsWith('en') &&
-          (v.name.includes('David') ||
-            v.name.includes('Male') ||
-            v.name.includes('George') ||
-            v.name.includes('Natural') ||
-            v.name.includes('Google UK English Male'))
-      )
+      const cockpitVoice =
+        voices.find(
+          (v) =>
+            v.lang.startsWith('en') &&
+            (v.name.includes('David') ||
+              v.name.includes('Mark') ||
+              v.name.includes('George') ||
+              v.name.includes('Natural') ||
+              v.name.includes('Male'))
+        ) ||
+        voices.find((v) => v.lang.startsWith('id') || v.name.includes('Indonesia')) ||
+        voices.find((v) => v.lang.startsWith('en'))
 
-      if (indonesianVoice) {
-        utterance.voice = indonesianVoice
-        utterance.lang = 'id-ID'
-      } else if (englishMaleVoice) {
-        utterance.voice = englishMaleVoice
-        utterance.lang = 'en-US'
+      if (cockpitVoice) {
+        utterance.voice = cockpitVoice
+        utterance.lang = cockpitVoice.lang
       }
 
-      utterance.onend = () => {
-        // Radio mic unclick and trailing squelch burst on transmission end
+      const finishTransmission = () => {
+        this.stopRadioCarrier()
+        // Radio mic unclick, trailing squelch cut and roger chirp
         this.playSquelchBurst(0.08)
-        this.playMicClick()
+        setTimeout(() => this.playRogerBeep(), 30)
       }
+
+      utterance.onend = finishTransmission
+      utterance.onerror = () => {
+        this.stopRadioCarrier()
+      }
+
+      // Fallback safety timeout in case speech engine hangs
+      const maxDuration = Math.max(3500, spokenText.length * 90)
+      this.carrierTimeout = setTimeout(() => {
+        if (this.isTransmitting) {
+          this.stopRadioCarrier()
+        }
+      }, maxDuration)
 
       window.speechSynthesis.speak(utterance)
     } catch {
-      // Fallback
+      this.stopRadioCarrier()
     }
   }
 }
