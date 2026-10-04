@@ -11,6 +11,10 @@ class RadioSoundFX {
   private isTransmitting = false
   private carrierTimeout: ReturnType<typeof setTimeout> | null = null
 
+  // FIFO Radio Transmission Queue: Ensures ongoing pilot transmissions complete without being cut off
+  private speechQueue: string[] = []
+  private isSpeaking = false
+
   private getContext(): AudioContext | null {
     if (typeof window === 'undefined') return null
     if (!this.ctx) {
@@ -378,15 +382,48 @@ class RadioSoundFX {
   }
 
   /**
-   * Speak Pilot voice readback in authentic Aviation English with
-   * distinct TUT-TUT radio chirps, continuous VHF carrier hiss,
-   * 400Hz cockpit alternator hum, and deep cockpit captain pitch
+   * Enqueue pilot speech readback into the FIFO transmission queue.
+   * Ensures the current pilot completes their sentence before the next transmission starts.
    */
   speakPilotVoice(text: string) {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) return
+    if (!text || text.trim().length === 0) return
+
+    const trimmed = text.trim()
+
+    // Prevent duplicate consecutive transmissions in queue
+    if (this.speechQueue.includes(trimmed)) return
+
+    // Cap queue to max 4 transmissions to keep radio timely
+    if (this.speechQueue.length >= 4) {
+      this.speechQueue.shift()
+    }
+
+    // Emergency transmissions jump to the front of the waiting queue
+    if (trimmed.includes('MAYDAY') || trimmed.includes('emergency')) {
+      this.speechQueue.unshift(trimmed)
+    } else {
+      this.speechQueue.push(trimmed)
+    }
+
+    if (!this.isSpeaking) {
+      this.processNextTransmission()
+    }
+  }
+
+  /**
+   * Process the next radio transmission in the FIFO queue
+   */
+  private processNextTransmission() {
+    if (this.speechQueue.length === 0) {
+      this.isSpeaking = false
+      return
+    }
+
+    this.isSpeaking = true
+    const text = this.speechQueue.shift()!
 
     try {
-      window.speechSynthesis.cancel()
       this.stopRadioCarrier()
 
       // 1. Play opening radio "TUT-TUT" PTT key-in tone
@@ -394,14 +431,15 @@ class RadioSoundFX {
 
       // 2. Start continuous VHF carrier hiss bed with cockpit alternator whine
       setTimeout(() => {
-        this.startRadioCarrier()
+        if (this.isSpeaking) {
+          this.startRadioCarrier()
+        }
       }, 70)
 
       const spokenText = this.formatRadioPhonetics(text)
       const utterance = new SpeechSynthesisUtterance(spokenText)
 
       // Authentic English Aviation Radio speech parameters:
-      // Enforce English language (ICAO standard)
       utterance.lang = 'en-US'
       utterance.pitch = 0.82
       utterance.rate = 1.15
@@ -429,31 +467,51 @@ class RadioSoundFX {
         utterance.lang = 'en-US'
       }
 
+      let isCompleted = false
       const finishTransmission = () => {
+        if (isCompleted) return
+        isCompleted = true
         this.stopRadioCarrier()
+
         // Play trailing radio "TUT-TUT" roger release chirp
         setTimeout(() => this.playRadioTutTut(true), 20)
+
+        // Natural radio gap pause (350ms dead air) before allowing the next aircraft to transmit!
+        setTimeout(() => {
+          this.isSpeaking = false
+          this.processNextTransmission()
+        }, 350)
       }
 
       utterance.onend = finishTransmission
       utterance.onerror = () => {
+        if (isCompleted) return
+        isCompleted = true
         this.stopRadioCarrier()
+        setTimeout(() => {
+          this.isSpeaking = false
+          this.processNextTransmission()
+        }, 200)
       }
 
       // Fallback safety timeout in case speech engine hangs
       const maxDuration = Math.max(3500, spokenText.length * 90)
       this.carrierTimeout = setTimeout(() => {
-        if (this.isTransmitting) {
-          this.stopRadioCarrier()
+        if (!isCompleted) {
+          finishTransmission()
         }
       }, maxDuration)
 
       // Slight offset so the opening TUT-TUT chirp is distinctly heard before speech starts!
       setTimeout(() => {
-        window.speechSynthesis.speak(utterance)
+        if (this.isSpeaking) {
+          window.speechSynthesis.speak(utterance)
+        }
       }, 120)
     } catch {
       this.stopRadioCarrier()
+      this.isSpeaking = false
+      setTimeout(() => this.processNextTransmission(), 200)
     }
   }
 }
