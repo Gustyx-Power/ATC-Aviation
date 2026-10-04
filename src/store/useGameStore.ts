@@ -45,6 +45,8 @@ export const getInitialAircrafts = (
     serviceProgress: 0,
     passengers: { current: 175, max: 180 },
     technicalHealth: 98,
+    pendingClearance: 'deboarding',
+    pendingClearanceTitle: 'Izin Penurunan Penumpang (Deboarding)',
     turnaround: {
       deboarded: false,
       cabinCleaned: false,
@@ -79,6 +81,8 @@ export const getInitialAircrafts = (
     serviceProgress: 100,
     passengers: { current: 180, max: 180 },
     technicalHealth: 100,
+    pendingClearance: 'takeoff',
+    pendingClearanceTitle: 'Izin Lepas Landas Runway 09',
     turnaround: {
       deboarded: true,
       cabinCleaned: true,
@@ -105,6 +109,9 @@ export const getInitialAircrafts = (
     waypoints: [],
     status: 'approach',
     destination: 'Inbound Runway 09',
+    isClearedToLand: false,
+    pendingClearance: 'landing',
+    pendingClearanceTitle: 'Izin Mendarat Runway 09',
     pos3d: { x: -850, y: 80, z: -260 },
     rot3d: { pitch: 0.05, yaw: -Math.PI / 2, roll: 0 },
     phaseProgress: 0,
@@ -139,6 +146,8 @@ export const getInitialAircrafts = (
     gate: 'Hangar 1',
     assignedGate: 'Hangar 1',
     destination: 'Maintenance & Service',
+    pendingClearance: 'overhaul',
+    pendingClearanceTitle: 'Izin Overhaul Mesin Hangar',
     pos3d: { x: 120, y: 0.1, z: -25 },
     rot3d: { pitch: 0, yaw: Math.PI, roll: 0 },
     phaseProgress: 0,
@@ -167,7 +176,7 @@ function pilotReadback(text: string) {
   radioSound.speakPilotVoice(text)
 }
 
-export const useGameStore = create<GameState>((set) => ({
+export const useGameStore = create<GameState>((set, get) => ({
   aircrafts: getInitialAircrafts(DEFAULT_CENTER, DEFAULT_RADIUS),
   score: 0,
   landedCount: 0,
@@ -183,13 +192,15 @@ export const useGameStore = create<GameState>((set) => ({
   simSpeed: 1,
   setSimSpeed: (speed: number) => set({ simSpeed: speed }),
   selectedAircraftId: 'GIA123',
+  focusedFlightId: 'GIA123',
+  setFocusedFlightId: (id: string | null) => set({ focusedFlightId: id, selectedAircraftId: id }),
   micActive: false,
 
   // 3D Tower & Operations state
   viewMode: 'tower',
   activeChannel: 'ground',
   tutorialActive: true,
-  tutorialText: 'GIA123 baru saja mendarat di Gate 1. Klik [👥 Turunkan Penumpang] untuk memulai siklus layanan pesawat!',
+  tutorialText: 'GIA123 baru saja mendarat di Gate 1. Klik [✓ SETUJUI IJIN] untuk memulai siklus layanan pesawat!',
   weather: {
     condition: 'Cerah',
     temp: 28,
@@ -199,6 +210,79 @@ export const useGameStore = create<GameState>((set) => ({
     time: '14:00',
   },
   emergencyServicesActive: false,
+
+  approveClearance: (id: string) => {
+    const ac = get().aircrafts.find((a) => a.id === id)
+    if (!ac || !ac.pendingClearance) return
+
+    radioSound.playRogerBeep()
+    const clearance = ac.pendingClearance
+
+    if (clearance === 'deboarding') {
+      get().startDeboarding(id)
+    } else if (clearance === 'cleaning') {
+      get().startCabinService(id)
+    } else if (clearance === 'refueling') {
+      get().startRefueling(id)
+    } else if (clearance === 'maintenance_check') {
+      get().startTechnicalCheck(id)
+    } else if (clearance === 'boarding') {
+      get().startBoarding(id)
+    } else if (clearance === 'pushback') {
+      get().orderPushback(id)
+    } else if (clearance === 'taxi_to_runway') {
+      get().orderTaxi(id)
+    } else if (clearance === 'takeoff') {
+      get().orderTakeoff(id)
+    } else if (clearance === 'landing') {
+      get().orderClearedToLand(id)
+    } else if (clearance === 'taxi_to_gate') {
+      const occupied = new Set(
+        get().aircrafts
+          .filter((a) => a.id !== id && a.status !== 'takeoff' && a.status !== 'airborne')
+          .map((a) => a.assignedGate || a.gate)
+          .filter(Boolean)
+      )
+      const vacant = (['Gate 1', 'Gate 2', 'Gate 3', 'Gate 4', 'Gate 5', 'Gate 6'] as const).find((g) => !occupied.has(g)) || 'Gate 1'
+      get().assignDestination(id, vacant)
+    } else if (clearance === 'overhaul') {
+      get().startEngineOverhaul(id)
+    } else if (clearance === 'avionics_check') {
+      get().startAvionicsCheck(id)
+    } else if (clearance === 'c_check') {
+      get().startCCheck(id)
+    }
+
+    set((s) => ({
+      aircrafts: s.aircrafts.map((a) =>
+        a.id === id ? { ...a, pendingClearance: undefined, pendingClearanceTitle: undefined } : a
+      ),
+    }))
+  },
+
+  denyClearance: (id: string) => {
+    const ac = get().aircrafts.find((a) => a.id === id)
+    if (!ac) return
+    radioSound.playRogerBeep()
+    if (ac.status === 'approach' || ac.pendingClearance === 'landing') {
+      get().orderHoldInAir(id)
+    } else {
+      pilotReadback(`${id}, izin ditahan oleh ATC, standby di posisi saat ini.`)
+      set((s) => ({
+        commsLog: [
+          ...s.commsLog,
+          {
+            id: `deny-${Date.now()}`,
+            timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
+            sender: 'ATC' as const,
+            callsign: id,
+            message: `${id}, negative clearance at this time, maintain current position.`,
+            type: 'command' as const,
+          },
+        ].slice(-50),
+      }))
+    }
+  },
 
   commsLog: [
     {
@@ -906,6 +990,7 @@ export const useGameStore = create<GameState>((set) => ({
       let landedThisTick = 0
       let updatedComms = state.commsLog
 
+      const ALL_GATES = ['Gate 1', 'Gate 2', 'Gate 3', 'Gate 4', 'Gate 5', 'Gate 6'] as const
       const GATE_COORDS: Record<string, { x: number; z: number }> = {
         'Gate 1': { x: -330, z: -55 },
         'Gate 2': { x: -260, z: -55 },
@@ -917,6 +1002,21 @@ export const useGameStore = create<GameState>((set) => ({
         'Hangar 2': { x: 180, z: -25 },
       }
 
+      // Check current gate saturation
+      const occupiedGatesSet = new Set(
+        state.aircrafts
+          .filter(
+            (a) =>
+              a.status !== 'takeoff' &&
+              a.status !== 'airborne' &&
+              a.status !== 'holding_pattern' &&
+              a.status !== 'approach'
+          )
+          .map((a) => a.assignedGate || a.gate)
+          .filter(Boolean)
+      )
+      const isGateFull = ALL_GATES.every((g) => occupiedGatesSet.has(g))
+
       const updatedAircrafts: Aircraft[] = state.aircrafts
         .map((ac): Aircraft => {
           let pos = ac.pos3d || { x: 0, y: 0.1, z: 0 }
@@ -927,10 +1027,13 @@ export const useGameStore = create<GameState>((set) => ({
           let serviceProg = ac.serviceProgress || 0
           let passengers = ac.passengers || { current: 180, max: 180 }
           let fuel = ac.fuel
+          let pendingClearance = ac.pendingClearance
+          let pendingClearanceTitle = ac.pendingClearanceTitle
+          let isClearedToLand = ac.isClearedToLand
 
-          // Turnaround Stage: DEBOARDING
+          // Turnaround Stage 1: DEBOARDING
           if (status === 'deboarding') {
-            const stepRate = 0.08 * (state.simSpeed || 1)
+            const stepRate = 0.12 * (state.simSpeed || 1)
             if (serviceProg < 100) {
               serviceProg = Math.min(100, serviceProg + stepRate)
               passengers = {
@@ -939,7 +1042,7 @@ export const useGameStore = create<GameState>((set) => ({
               }
               return { ...ac, serviceProgress: serviceProg, passengers }
             } else {
-              // FINISHED: Deboarding complete, STOP and wait for ATC/Ground command
+              // FINISHED: Deboarding complete, STOP at 100% and request cleaning clearance
               status = 'at_gate'
               serviceProg = 100
               passengers = { ...passengers, current: 0 }
@@ -947,59 +1050,78 @@ export const useGameStore = create<GameState>((set) => ({
                 ...(ac.turnaround || {}),
                 deboarded: true,
               }
+              pendingClearance = 'cleaning'
+              pendingClearanceTitle = 'Izin Pembersihan Kabin'
               radioSound.playRogerBeep()
-              pilotReadback(`${ac.id}, penurunan seluruh penumpang dan bagasi selesai. Kabin kosong. Menunggu izin pembersihan kabin.`)
+              pilotReadback(`${ac.id}, penurunan penumpang dan bagasi selesai seratus persen. Kabin kosong. Memohon persetujuan ATC untuk pembersihan kabin.`)
               const logMsg: CommLogItem = {
                 id: `deb-done-${Date.now()}`,
                 timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
-                sender: 'GROUND_CREW' as const,
+                sender: 'PILOT' as const,
                 callsign: ac.id,
-                message: `Deboarding completed for ${ac.id}. 0 pax on board. Ready for cabin cleaning.`,
+                message: `${ac.id}: Deboarding 100% completed. Cabin empty. Requesting clearance for cabin cleaning.`,
                 type: 'info' as const,
               }
               updatedComms = [...updatedComms, logMsg]
-              return { ...ac, status, serviceProgress: 100, passengers, turnaround }
+              return {
+                ...ac,
+                status,
+                serviceProgress: 100,
+                passengers,
+                turnaround,
+                pendingClearance,
+                pendingClearanceTitle,
+              }
             }
           }
 
-          // Turnaround Stage: CLEANING
+          // Turnaround Stage 2: CLEANING
           if (status === 'cleaning') {
-            const stepRate = 0.09 * (state.simSpeed || 1)
+            const stepRate = 0.13 * (state.simSpeed || 1)
             if (serviceProg < 100) {
               serviceProg = Math.min(100, serviceProg + stepRate)
               return { ...ac, serviceProgress: serviceProg }
             } else {
-              // FINISHED: Cleaning complete, STOP and wait for ATC/Ground command
+              // FINISHED: Cleaning complete, STOP at 100% and request refueling clearance
               status = 'at_gate'
               serviceProg = 100
               const turnaround = {
                 ...(ac.turnaround || {}),
                 cabinCleaned: true,
               }
+              pendingClearance = 'refueling'
+              pendingClearanceTitle = 'Izin Pengisian Avtur'
               radioSound.playRogerBeep()
-              pilotReadback(`${ac.id}, kru kabin selesai membersihkan dan merapikan interior. Katering terisi. Menunggu izin pengisian avtur.`)
+              pilotReadback(`${ac.id}, pembersihan interior kabin dan katering selesai seratus persen. Memohon persetujuan ATC untuk pengisian avtur.`)
               const logMsg: CommLogItem = {
                 id: `clean-done-${Date.now()}`,
                 timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
-                sender: 'GROUND_CREW' as const,
+                sender: 'PILOT' as const,
                 callsign: ac.id,
-                message: `Cabin service completed for ${ac.id}. Cabin sanitized & catering restocked. Ready for refueling.`,
+                message: `${ac.id}: Cabin cleaning 100% completed. Catering restocked. Requesting clearance for refueling.`,
                 type: 'info' as const,
               }
               updatedComms = [...updatedComms, logMsg]
-              return { ...ac, status, serviceProgress: 100, turnaround }
+              return {
+                ...ac,
+                status,
+                serviceProgress: 100,
+                turnaround,
+                pendingClearance,
+                pendingClearanceTitle,
+              }
             }
           }
 
-          // Turnaround Stage: REFUELING
+          // Turnaround Stage 3: REFUELING
           if (status === 'refueling') {
-            const stepRate = 0.07 * (state.simSpeed || 1)
+            const stepRate = 0.11 * (state.simSpeed || 1)
             if (serviceProg < 100) {
               serviceProg = Math.min(100, serviceProg + stepRate)
               fuel = Math.min(100, Math.round(30 + (70 * serviceProg) / 100))
               return { ...ac, serviceProgress: serviceProg, fuel }
             } else {
-              // FINISHED: Refueling complete, STOP and wait for ATC/Ground command
+              // FINISHED: Refueling complete, STOP at 100% and request technical check clearance
               status = 'at_gate'
               serviceProg = 100
               fuel = 100
@@ -1007,53 +1129,73 @@ export const useGameStore = create<GameState>((set) => ({
                 ...(ac.turnaround || {}),
                 refueled: true,
               }
+              pendingClearance = 'maintenance_check'
+              pendingClearanceTitle = 'Izin Pemeriksaan Teknis'
               radioSound.playRogerBeep()
-              pilotReadback(`${ac.id}, pengisian avtur selesai seratus persen. Selang truk tangki telah dilepas. Menunggu izin pemeriksaan teknis.`)
+              pilotReadback(`${ac.id}, pengisian avtur selesai seratus persen. Truk tangki telah dilepas. Memohon persetujuan ATC untuk inspeksi walkaround teknisi.`)
               const logMsg: CommLogItem = {
                 id: `fuel-done-${Date.now()}`,
                 timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
-                sender: 'GROUND_CREW' as const,
+                sender: 'PILOT' as const,
                 callsign: ac.id,
-                message: `Refueling completed for ${ac.id}. Fuel at 100% capacity. Hose disconnected. Ready for technical check.`,
+                message: `${ac.id}: Refueling 100% completed. Fuel capacity full. Requesting clearance for pre-flight technical check.`,
                 type: 'info' as const,
               }
               updatedComms = [...updatedComms, logMsg]
-              return { ...ac, status, serviceProgress: 100, fuel: 100, turnaround }
+              return {
+                ...ac,
+                status,
+                serviceProgress: 100,
+                fuel: 100,
+                turnaround,
+                pendingClearance,
+                pendingClearanceTitle,
+              }
             }
           }
 
-          // Turnaround Stage: TECHNICAL CHECK
+          // Turnaround Stage 4: TECHNICAL CHECK
           if (status === 'maintenance_check') {
-            const stepRate = 0.08 * (state.simSpeed || 1)
+            const stepRate = 0.12 * (state.simSpeed || 1)
             if (serviceProg < 100) {
               serviceProg = Math.min(100, serviceProg + stepRate)
               return { ...ac, serviceProgress: serviceProg, technicalHealth: 100 }
             } else {
-              // FINISHED: Tech check complete, STOP and wait for ATC/Ground command
+              // FINISHED: Tech check complete, STOP at 100% and request boarding clearance
               status = 'at_gate'
               serviceProg = 100
               const turnaround = {
                 ...(ac.turnaround || {}),
                 techInspected: true,
               }
+              pendingClearance = 'boarding'
+              pendingClearanceTitle = 'Izin Boarding Penumpang'
               radioSound.playRogerBeep()
-              pilotReadback(`${ac.id}, walkaround inspection teknisi selesai. Roda, hidrolik, dan mesin laik terbang. Menunggu izin boarding penumpang.`)
+              pilotReadback(`${ac.id}, pemeriksaan teknisi selesai, pesawat laik terbang seratus persen. Memohon persetujuan ATC untuk boarding penumpang.`)
               const logMsg: CommLogItem = {
                 id: `tech-done-${Date.now()}`,
                 timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
-                sender: 'GROUND_CREW' as const,
+                sender: 'PILOT' as const,
                 callsign: ac.id,
-                message: `Pre-flight walkaround completed on ${ac.id}. Technical health 100% (Airworthy). Ready for boarding.`,
+                message: `${ac.id}: Technical walkaround completed 100%. Airworthiness certified. Requesting clearance for passenger boarding.`,
                 type: 'info' as const,
               }
               updatedComms = [...updatedComms, logMsg]
-              return { ...ac, status, serviceProgress: 100, technicalHealth: 100, turnaround }
+              return {
+                ...ac,
+                status,
+                serviceProgress: 100,
+                technicalHealth: 100,
+                turnaround,
+                pendingClearance,
+                pendingClearanceTitle,
+              }
             }
           }
 
-          // Turnaround Stage: BOARDING
+          // Turnaround Stage 5: BOARDING
           if (status === 'boarding') {
-            const stepRate = 0.08 * (state.simSpeed || 1)
+            const stepRate = 0.12 * (state.simSpeed || 1)
             if (serviceProg < 100) {
               serviceProg = Math.min(100, serviceProg + stepRate)
               passengers = {
@@ -1062,7 +1204,7 @@ export const useGameStore = create<GameState>((set) => ({
               }
               return { ...ac, serviceProgress: serviceProg, passengers }
             } else {
-              // FINISHED: Boarding complete! Aircraft is ready for pushback, WAITING FOR ATC CLEARANCE
+              // FINISHED: Boarding complete! Aircraft is ready for pushback, requesting ATC clearance
               status = 'ready_pushback'
               serviceProg = 100
               passengers = { ...passengers, current: passengers.max }
@@ -1070,28 +1212,39 @@ export const useGameStore = create<GameState>((set) => ({
                 ...(ac.turnaround || {}),
                 boarded: true,
               }
+              pendingClearance = 'pushback'
+              pendingClearanceTitle = 'Izin Dorongan Mundur (Pushback)'
               radioSound.playRogerBeep()
-              pilotReadback(`${ac.id}, boarding selesai. Seratus delapan puluh penumpang di dalam kabin, pintu ditutup. Meminta izin dorongan kembali (Pushback).`)
+              pilotReadback(`${ac.id}, boarding seratus delapan puluh penumpang selesai, pintu kabin ditutup. Memohon izin dorongan kembali pushback ke Taxiway Alpha.`)
               const logMsg: CommLogItem = {
                 id: `board-done-${Date.now()}`,
                 timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
                 sender: 'PILOT' as const,
                 callsign: ac.id,
-                message: `${ac.id}: Boarding completed (180/180 pax). Cabin secured. Requesting pushback clearance.`,
+                message: `${ac.id}: Boarding completed (180/180 pax). Cabin doors closed. Requesting pushback clearance.`,
                 type: 'info' as const,
               }
               updatedComms = [...updatedComms, logMsg]
-              return { ...ac, status: 'ready_pushback', serviceProgress: 100, passengers, turnaround }
+              return {
+                ...ac,
+                status: 'ready_pushback',
+                serviceProgress: 100,
+                passengers,
+                turnaround,
+                pendingClearance,
+                pendingClearanceTitle,
+              }
             }
           }
 
-          // Phase: HOLDING PATTERN (Circling at FL035 above Fix Alpha)
+          // Phase: HOLDING PATTERN (Circling at FL035 above Airport)
           if (status === 'holding_pattern') {
             let orbit = (ac.orbitAngle || 0) + 0.010 * (state.simSpeed || 1)
             if (orbit > Math.PI * 2) orbit -= Math.PI * 2
             const orbitX = -500 + Math.cos(orbit) * 190
             const orbitZ = -260 + Math.sin(orbit) * 90
-            const orbitHeading = Math.round((Math.atan2(-Math.sin(orbit) * 90, Math.cos(orbit) * 190) * 180) / Math.PI + 360) % 360
+            const orbitHeading =
+              Math.round((Math.atan2(-Math.sin(orbit) * 90, Math.cos(orbit) * 190) * 180) / Math.PI + 360) % 360
             return {
               ...ac,
               orbitAngle: orbit,
@@ -1103,7 +1256,7 @@ export const useGameStore = create<GameState>((set) => ({
 
           // Hangar Maintenance Stages: OVERHAUL, AVIONICS, C_CHECK
           if (status === 'overhaul' || status === 'avionics_check' || status === 'c_check') {
-            const stepRate = 0.08 * (state.simSpeed || 1)
+            const stepRate = 0.11 * (state.simSpeed || 1)
             if (serviceProg < 100) {
               serviceProg = Math.min(100, serviceProg + stepRate)
               return { ...ac, serviceProgress: serviceProg }
@@ -1117,8 +1270,13 @@ export const useGameStore = create<GameState>((set) => ({
                 cCheckPassed: completedService === 'c_check' ? true : ac.turnaround?.cCheckPassed,
               }
               radioSound.playRogerBeep()
-              const stepName = completedService === 'overhaul' ? 'Overhaul mesin' : completedService === 'avionics_check' ? 'Kalibrasi avionik' : 'Inspeksi C-Check'
-              pilotReadback(`${ac.id}, ${stepName} selesai dan lulus uji sistem.`)
+              const stepName =
+                completedService === 'overhaul'
+                  ? 'Overhaul mesin'
+                  : completedService === 'avionics_check'
+                  ? 'Kalibrasi avionik'
+                  : 'Inspeksi C-Check'
+              pilotReadback(`${ac.id}, ${stepName} selesai seratus persen dan lulus uji kelaikan terbang.`)
               const logMsg: CommLogItem = {
                 id: `hangar-done-${Date.now()}`,
                 timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
@@ -1128,7 +1286,15 @@ export const useGameStore = create<GameState>((set) => ({
                 type: 'info' as const,
               }
               updatedComms = [...updatedComms, logMsg]
-              return { ...ac, status: 'in_hangar', serviceProgress: 100, technicalHealth: 100, turnaround }
+              return {
+                ...ac,
+                status: 'in_hangar',
+                serviceProgress: 100,
+                technicalHealth: 100,
+                turnaround,
+                pendingClearance: undefined,
+                pendingClearanceTitle: undefined,
+              }
             }
           }
 
@@ -1159,9 +1325,32 @@ export const useGameStore = create<GameState>((set) => ({
               status = isHangar ? 'in_hangar' : 'at_gate'
               pos = { x: targetPos.x, y: 0.1, z: targetPos.z }
               heading = isHangar ? 180 : 0
+              if (!isHangar) {
+                // Request Deboarding clearance when parked at gate!
+                pendingClearance = 'deboarding'
+                pendingClearanceTitle = 'Izin Penurunan Penumpang (Deboarding)'
+                pilotReadback(`${ac.id}, parkir sempurna di ${destName}, mesin dimatikan. Memohon izin penurunan penumpang.`)
+                const arriveMsg: CommLogItem = {
+                  id: `dock-${Date.now()}`,
+                  timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
+                  sender: 'PILOT' as const,
+                  callsign: ac.id,
+                  message: `${ac.id}: Docked at ${destName}, engines shutdown. Requesting deboarding clearance.`,
+                  type: 'info' as const,
+                }
+                updatedComms = [...updatedComms, arriveMsg]
+              }
             }
 
-            return { ...ac, status, pos3d: pos, heading, gate: destName }
+            return {
+              ...ac,
+              status,
+              pos3d: pos,
+              heading,
+              gate: destName,
+              pendingClearance,
+              pendingClearanceTitle,
+            }
           }
 
           // Phase: PUSHBACK
@@ -1179,8 +1368,28 @@ export const useGameStore = create<GameState>((set) => ({
               progress = 0
               pos.z = -135
               heading = 270
+              pendingClearance = 'taxi_to_runway'
+              pendingClearanceTitle = 'Izin Taksi ke Runway 09'
+              pilotReadback(`${ac.id}, pushback selesai di Taxiway Alpha, rem parkir terpasang. Memohon izin taksi ke titik tunggu Runway nol sembilan.`)
+              const pbMsg: CommLogItem = {
+                id: `pb-done-${Date.now()}`,
+                timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
+                sender: 'PILOT' as const,
+                callsign: ac.id,
+                message: `${ac.id}: Pushback completed onto Taxiway Alpha. Requesting taxi clearance to Runway 09 holding point.`,
+                type: 'info' as const,
+              }
+              updatedComms = [...updatedComms, pbMsg]
             }
-            return { ...ac, status, heading, pos3d: pos, phaseProgress: progress }
+            return {
+              ...ac,
+              status,
+              heading,
+              pos3d: pos,
+              phaseProgress: progress,
+              pendingClearance,
+              pendingClearanceTitle,
+            }
           }
 
           // Phase: TAXI TO RUNWAY
@@ -1196,8 +1405,27 @@ export const useGameStore = create<GameState>((set) => ({
             } else {
               status = 'holding'
               pos.x = targetHoldX
+              pendingClearance = 'takeoff'
+              pendingClearanceTitle = 'Izin Lepas Landas Runway 09'
+              pilotReadback(`${ac.id}, holding short Runway nol sembilan, siap untuk lepas landas.`)
+              const holdMsg: CommLogItem = {
+                id: `hold-rwy-${Date.now()}`,
+                timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
+                sender: 'PILOT' as const,
+                callsign: ac.id,
+                message: `${ac.id}: Holding short Runway 09, ready for departure. Requesting takeoff clearance.`,
+                type: 'info' as const,
+              }
+              updatedComms = [...updatedComms, holdMsg]
             }
-            return { ...ac, status, heading, pos3d: pos }
+            return {
+              ...ac,
+              status,
+              heading,
+              pos3d: pos,
+              pendingClearance,
+              pendingClearanceTitle,
+            }
           }
 
           // Phase: TAKEOFF ROLL & CLIMB
@@ -1256,6 +1484,32 @@ export const useGameStore = create<GameState>((set) => ({
               z: -260,
             }
 
+            // CRITICAL CHECK: Approach without ATC Landing Clearance -> PULL UP TO HOLDING!
+            if (!isClearedToLand && status !== 'emergency' && newX >= -740) {
+              radioSound.playConflictAlert()
+              pilotReadback(`${ac.id}, belum menerima izin mendarat dari ATC! Batalkan pendekatan, naik ke holding pattern FL035 berputar di atas bandara.`)
+              const goAroundMsg: CommLogItem = {
+                id: `hold-pullup-${Date.now()}`,
+                timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
+                sender: 'PILOT' as const,
+                callsign: ac.id,
+                message: `${ac.id}: Approaching threshold with NO landing clearance! Aborting landing, entering holding pattern at FL035.`,
+                type: 'alert' as const,
+              }
+              updatedComms = [...updatedComms, goAroundMsg]
+              return {
+                ...ac,
+                status: 'holding_pattern',
+                holdingReason: 'atc_order',
+                altitude: 3500,
+                orbitAngle: 0,
+                isClearedToLand: false,
+                pendingClearance: 'landing',
+                pendingClearanceTitle: 'Izin Mendarat Runway 09',
+                pos3d: { x: -500, y: 95, z: -260 },
+              }
+            }
+
             if (newX >= targetTouchdownX) {
               const wasEmergency = ac.status === 'emergency'
               status = 'landing'
@@ -1286,26 +1540,31 @@ export const useGameStore = create<GameState>((set) => ({
               x: pos.x + 1.2,
               y: 0.2,
             }
-            // Decelerated at exit Bravo (X = -80)
+            // Decelerated at exit Bravo (X = -80) -> STOP & REQUEST GATE CLEARANCE!
             if (pos.x >= -80) {
-              status = 'taxi_to_gate'
-              // Find first vacant gate among Gate 1 to Gate 6
-              const occupiedGates = new Set(
-                state.aircrafts.filter((a) => a.id !== ac.id).map((a) => a.assignedGate || a.gate).filter(Boolean)
-              )
-              const candidateGates: ('Gate 1' | 'Gate 2' | 'Gate 3' | 'Gate 4' | 'Gate 5' | 'Gate 6')[] = [
-                'Gate 1',
-                'Gate 2',
-                'Gate 3',
-                'Gate 4',
-                'Gate 5',
-                'Gate 6',
-              ]
-              const vacant = candidateGates.find((g) => !occupiedGates.has(g)) || 'Gate 1'
-              const assigned = ac.assignedGate || vacant
+              status = 'holding'
               pos = { x: -80, y: 0.1, z: -195 }
               heading = 0
-              return { ...ac, status: 'taxi_to_gate', assignedGate: assigned, gate: assigned, pos3d: pos, heading }
+              pendingClearance = 'taxi_to_gate'
+              pendingClearanceTitle = 'Alokasi Gate & Izin Taksi ke Apron'
+              pilotReadback(`${ac.id}, runway nol sembilan bebas di taxiway Bravo. Memohon alokasi gate dan izin taksi ke apron.`)
+              const vacateMsg: CommLogItem = {
+                id: `vacate-${Date.now()}`,
+                timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
+                sender: 'PILOT' as const,
+                callsign: ac.id,
+                message: `${ac.id}: Runway 09 vacated at Taxiway Bravo. Requesting gate assignment and taxi clearance.`,
+                type: 'info' as const,
+              }
+              updatedComms = [...updatedComms, vacateMsg]
+              return {
+                ...ac,
+                status: 'holding',
+                pos3d: pos,
+                heading,
+                pendingClearance,
+                pendingClearanceTitle,
+              }
             }
             return { ...ac, status, pos3d: pos, heading }
           }
@@ -1317,37 +1576,156 @@ export const useGameStore = create<GameState>((set) => ({
           return true
         })
 
+      // Check if any holding plane can now request descent because a gate freed up
+      if (!isGateFull) {
+        const candidateGates = ['Gate 1', 'Gate 2', 'Gate 3', 'Gate 4', 'Gate 5', 'Gate 6'] as const
+        const currentOccupied = new Set(
+          updatedAircrafts
+            .filter(
+              (a) =>
+                a.status !== 'takeoff' &&
+                a.status !== 'airborne' &&
+                a.status !== 'holding_pattern' &&
+                a.status !== 'approach'
+            )
+            .map((a) => a.assignedGate || a.gate)
+            .filter(Boolean)
+        )
+        const firstFreeGate = candidateGates.find((g) => !currentOccupied.has(g))
+
+        if (firstFreeGate) {
+          const waitingHoldingPlane = updatedAircrafts.find(
+            (a) => a.status === 'holding_pattern' && a.holdingReason === 'gates_full' && !a.pendingClearance
+          )
+          if (waitingHoldingPlane) {
+            waitingHoldingPlane.holdingReason = undefined
+            waitingHoldingPlane.pendingClearance = 'landing'
+            waitingHoldingPlane.pendingClearanceTitle = `Izin Mendarat (${firstFreeGate} Kosong)`
+            pilotReadback(`${waitingHoldingPlane.id}, holding FL035. Terpantau ${firstFreeGate} telah kosong. Memohon persetujuan ATC untuk keluar holding dan mendarat Runway nol sembilan.`)
+            const exitReqMsg: CommLogItem = {
+              id: `exit-req-${Date.now()}`,
+              timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
+              sender: 'PILOT',
+              callsign: waitingHoldingPlane.id,
+              message: `${waitingHoldingPlane.id}: Holding FL035. ${firstFreeGate} is now vacant. Requesting descent and landing clearance Runway 09.`,
+              type: 'info',
+            }
+            updatedComms = [...updatedComms, exitReqMsg]
+          }
+        }
+      }
+
       // Continuous Realistic Inbound Traffic Generator
-      const inboundPlanes = updatedAircrafts.filter((a) => a.status === 'approach' || a.status === 'holding_pattern')
-      const spawnInterval = Math.round(1500 / (state.simSpeed || 1)) // Every ~25-30s at 1x
-      if (frameCounter % spawnInterval === 0 && updatedAircrafts.length < 6 && inboundPlanes.length < 2) {
+      const inboundPlanes = updatedAircrafts.filter(
+        (a) => a.status === 'approach' || a.status === 'holding_pattern'
+      )
+      const spawnInterval = 1800 // ~30s at 1x real time (frame rate independent simulation)
+      if (frameCounter % spawnInterval === 0 && updatedAircrafts.length < 7 && inboundPlanes.length < 2) {
         const center = state.radarCenter || DEFAULT_CENTER
         const radius = state.radarRadius || DEFAULT_RADIUS
         const existingIds = updatedAircrafts.map((a) => a.id)
         const incoming = generateRandomAircraft(center, radius, existingIds)
-        incoming.status = 'approach'
-        incoming.pos3d = { x: -960, y: 120, z: -260 }
-        incoming.altitude = 2500
-        incoming.heading = 90
-        incoming.destination = 'Inbound Runway 09'
         incoming.passengers = { current: 155, max: 180 }
         incoming.fuel = 45 + Math.floor(Math.random() * 25)
 
-        const checkInMsg: CommLogItem = {
-          id: `inbound-${Date.now()}`,
-          timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
-          sender: 'PILOT',
-          callsign: incoming.id,
-          message: `Jakarta Tower, ${incoming.airline} ${incoming.id.replace(/\D/g, '')} inbound, passing 2,500ft, requesting gate and landing clearance.`,
-          type: 'info',
+        if (isGateFull) {
+          // GATE FULL: AUTOMATICALLY ENTER HOLDING PATTERN!
+          incoming.status = 'holding_pattern'
+          incoming.holdingReason = 'gates_full'
+          incoming.altitude = 3500
+          incoming.orbitAngle = Math.random() * Math.PI * 2
+          incoming.pos3d = { x: -500, y: 95, z: -260 }
+          incoming.isClearedToLand = false
+          incoming.pendingClearance = undefined
+          pilotReadback(`${incoming.id}, semua enam gate bandara penuh. Otomatis masuk pola putar holding pattern FL035 berputar di atas bandara hingga gate kosong.`)
+          const holdFullMsg: CommLogItem = {
+            id: `hold-full-${Date.now()}`,
+            timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
+            sender: 'PILOT',
+            callsign: incoming.id,
+            message: `${incoming.id}: Inbound traffic, all 6 gates occupied. Entering holding pattern at FL035 awaiting gate availability.`,
+            type: 'info',
+          }
+          updatedComms = [...updatedComms, holdFullMsg]
+        } else {
+          // APPROACH - REQUIRES ATC CLEARANCE TO LAND!
+          incoming.status = 'approach'
+          incoming.pos3d = { x: -960, y: 120, z: -260 }
+          incoming.altitude = 2500
+          incoming.heading = 90
+          incoming.destination = 'Inbound Runway 09'
+          incoming.isClearedToLand = false
+          incoming.pendingClearance = 'landing'
+          incoming.pendingClearanceTitle = 'Izin Mendarat Runway 09'
+          pilotReadback(`${incoming.id}, inbound passing dua ribu lima ratus kaki, memohon izin mendarat Runway nol sembilan.`)
+          const checkInMsg: CommLogItem = {
+            id: `inbound-${Date.now()}`,
+            timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
+            sender: 'PILOT',
+            callsign: incoming.id,
+            message: `Jakarta Tower, ${incoming.airline} ${incoming.id.replace(/\D/g, '')} inbound, passing 2,500ft, requesting landing clearance.`,
+            type: 'info',
+          }
+          updatedComms = [...updatedComms, checkInMsg]
         }
-        pilotReadback(`${incoming.id}, inbound, passing dua ribu lima ratus kaki, minta izin mendarat dan gate.`)
-        updatedComms = [...updatedComms, checkInMsg]
+
         updatedAircrafts.push(incoming)
+      }
+
+      // Natural Random Weather Transitions (Every ~45-60s = ~2700-3600 frames at 60fps)
+      let nextWeather = state.weather
+      if (frameCounter % 3000 === 0 && Math.random() < 0.75) {
+        const rand = Math.random()
+        let newCond: WeatherCondition = 'Cerah'
+        let temp = 28
+        let wind = '270° 06KT'
+        let rainIntensity = 0
+        let visibility = 10000
+
+        if (rand < 0.25) {
+          newCond = 'Hujan Badai'
+          temp = 23
+          wind = '280° 24KT GUST 32KT'
+          rainIntensity = 0.85
+          visibility = 1800
+        } else if (rand < 0.45) {
+          newCond = 'Kabut Tebal'
+          temp = 21
+          wind = '350° 03KT'
+          rainIntensity = 0
+          visibility = 500
+        } else {
+          newCond = 'Cerah'
+          temp = 29
+          wind = '260° 08KT'
+          rainIntensity = 0
+          visibility = 10000
+        }
+
+        if (newCond !== state.weather.condition) {
+          radioSound.playMicClick()
+          nextWeather = {
+            condition: newCond,
+            temp,
+            wind,
+            rainIntensity,
+            visibility,
+            time: new Date().toLocaleTimeString('en-GB', { hour12: false }).substring(0, 5),
+          }
+          const wxMsg: CommLogItem = {
+            id: `atis-${Date.now()}`,
+            timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
+            sender: 'SYSTEM',
+            message: `ATIS INFO BROADCAST: Weather updated to ${newCond.toUpperCase()}. Wind ${wind}, Vis ${visibility}m, Temp ${temp}°C.`,
+            type: 'info',
+          }
+          updatedComms = [...updatedComms, wxMsg]
+        }
       }
 
       return {
         aircrafts: updatedAircrafts,
+        weather: nextWeather,
         survivalTime: state.survivalTime + 1 / 60,
         airMiles: state.airMiles + awardedMiles,
         landedCount: state.landedCount + landedThisTick,
@@ -1416,10 +1794,11 @@ export const useGameStore = create<GameState>((set) => ({
       collisionPoint: null,
       isPaused: false,
       selectedAircraftId: 'GIA123',
+      focusedFlightId: 'GIA123',
       viewMode: 'tower',
       activeChannel: 'ground',
       tutorialActive: true,
-      tutorialText: 'GIA123 baru saja mendarat di Gate 1. Klik [👥 Turunkan Penumpang] untuk memulai siklus layanan pesawat!',
+      tutorialText: 'GIA123 baru saja mendarat di Gate 1. Klik [✓ SETUJUI IJIN] untuk memulai penurunan penumpang!',
       commsLog: [
         {
           id: 'reset-1',

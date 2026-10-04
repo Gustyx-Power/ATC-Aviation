@@ -38,6 +38,21 @@ export type AssignedGate =
   | 'Hangar 1'
   | 'Hangar 2';
 
+export type PendingClearanceType =
+  | 'landing'
+  | 'taxi_to_gate'
+  | 'deboarding'
+  | 'cleaning'
+  | 'refueling'
+  | 'maintenance_check'
+  | 'boarding'
+  | 'pushback'
+  | 'taxi_to_runway'
+  | 'takeoff'
+  | 'overhaul'
+  | 'avionics_check'
+  | 'c_check';
+
 export interface Aircraft {
   id: string;              // e.g., "GIA123"
   x: number;
@@ -70,6 +85,13 @@ export interface Aircraft {
   passengers?: { current: number; max: number };
   technicalHealth?: number; // 0 to 100%
   emergencyReason?: string; // e.g. "Kerusakan Mesin 1", "Bahan Bakar Kritis"
+
+  // 2-Way Clearance & Turnaround System
+  pendingClearance?: PendingClearanceType;
+  pendingClearanceTitle?: string;
+  isClearedToLand?: boolean;
+  holdingReason?: 'gates_full' | 'atc_order';
+
   turnaround?: {
     deboarded?: boolean;
     cabinCleaned?: boolean;
@@ -164,6 +186,12 @@ export interface GameState {
   setSimSpeed: (speed: number) => void;
   setMicActive: (active: boolean) => void;
   resetGame: () => void;
+
+  // Focused flight for 1-by-1 systematic ATC control
+  focusedFlightId: string | null;
+  setFocusedFlightId: (id: string | null) => void;
+  approveClearance: (id: string) => void;
+  denyClearance: (id: string) => void;
 
   // Real Turnaround & Ground Operations Clearances
   assignDestination: (id: string, destination: 'Gate 1' | 'Gate 2' | 'Gate 3' | 'Gate 4' | 'Gate 5' | 'Gate 6' | 'Hangar 1' | 'Hangar 2') => void;
