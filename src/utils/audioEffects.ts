@@ -212,33 +212,54 @@ class RadioSoundFX {
   }
 
   /**
-   * Pilot Roger Roger double-tone ack beep
+   * Iconic VHF Airband "TUT-TUT" / PTT Radio Chirp (Dual-frequency aviation tone)
    */
-  playRogerBeep() {
+  playRadioTutTut(reverse = false) {
     try {
       const ctx = this.getContext()
       if (!ctx) return
 
       const now = ctx.currentTime
-      const osc = ctx.createOscillator()
-      const gain = ctx.createGain()
+      const f1 = reverse ? 1550 : 2180
+      const f2 = reverse ? 2180 : 1620
 
-      osc.type = 'sine'
-      osc.frequency.setValueAtTime(1200, now)
-      osc.frequency.setValueAtTime(1800, now + 0.05)
+      // First beep: "TUT"
+      const osc1 = ctx.createOscillator()
+      const gain1 = ctx.createGain()
+      osc1.type = 'sine'
+      osc1.frequency.setValueAtTime(f1, now)
+      gain1.gain.setValueAtTime(0.15, now)
+      gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.055)
+      osc1.connect(gain1)
+      gain1.connect(ctx.destination)
+      osc1.start(now)
+      osc1.stop(now + 0.055)
 
-      gain.gain.setValueAtTime(0.05, now)
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.11)
+      // Second beep: "TUT"
+      const t2 = now + 0.075
+      const osc2 = ctx.createOscillator()
+      const gain2 = ctx.createGain()
+      osc2.type = 'sine'
+      osc2.frequency.setValueAtTime(f2, t2)
+      gain2.gain.setValueAtTime(0.15, t2)
+      gain2.gain.exponentialRampToValueAtTime(0.001, t2 + 0.065)
+      osc2.connect(gain2)
+      gain2.connect(ctx.destination)
+      osc2.start(t2)
+      osc2.stop(t2 + 0.065)
 
-      osc.connect(gain)
-      gain.connect(ctx.destination)
-
-      osc.start()
-      osc.stop(now + 0.11)
-      this.playSquelchBurst(0.05)
+      // Accompanied by airband mic squelch burst
+      this.playSquelchBurst(0.06)
     } catch {
       // Ignore
     }
+  }
+
+  /**
+   * Pilot Roger Roger double-tone ack beep ("TUT-TUT")
+   */
+  playRogerBeep() {
+    this.playRadioTutTut(false)
   }
 
   /**
@@ -333,23 +354,33 @@ class RadioSoundFX {
   }
 
   /**
-   * Convert aircraft flight numbers & aviation abbreviations to natural radio phonetics
+   * Convert aircraft flight numbers & aviation abbreviations to natural English aviation radio phonetics
    */
   private formatRadioPhonetics(text: string): string {
     return text
-      .replace(/GIA123/gi, 'Garuda satu dua tiga')
-      .replace(/LNI456/gi, 'Lion Air empat lima enam')
-      .replace(/CTV789/gi, 'Citilink tujuh delapan sembilan')
-      .replace(/BTK204/gi, 'Batik Air dua nol empat')
-      .replace(/\bFL035\b/gi, 'Flight Level tiga puluh lima')
-      .replace(/\bFL050\b/gi, 'Flight Level lima puluh')
-      .replace(/\bRunway 09\b/gi, 'Runway nol sembilan')
-      .replace(/\bRunway 27\b/gi, 'Runway dua tujuh')
+      .replace(/GIA123/gi, 'Garuda one two three')
+      .replace(/LNI456/gi, 'Lion Air four five six')
+      .replace(/CTV789/gi, 'Citilink seven eight niner')
+      .replace(/BTK204/gi, 'Batik Air two zero four')
+      .replace(/\bFL035\b/gi, 'Flight Level three five')
+      .replace(/\bFL040\b/gi, 'Flight Level four zero')
+      .replace(/\bFL050\b/gi, 'Flight Level five zero')
+      .replace(/\bRunway 09\b/gi, 'Runway zero niner')
+      .replace(/\bRunway 27\b/gi, 'Runway two seven')
+      .replace(/\bRunway nol sembilan\b/gi, 'Runway zero niner')
+      .replace(/\bRunway dua tujuh\b/gi, 'Runway two seven')
+      .replace(/\bGate 1\b/gi, 'Gate one')
+      .replace(/\bGate 2\b/gi, 'Gate two')
+      .replace(/\bGate 3\b/gi, 'Gate three')
+      .replace(/\bGate 4\b/gi, 'Gate four')
+      .replace(/\bGate 5\b/gi, 'Gate five')
+      .replace(/\bGate 6\b/gi, 'Gate six')
   }
 
   /**
-   * Speak Pilot voice readback aloud with authentic VHF radio carrier hiss,
-   * PTT squelch keying, deep cockpit pitch, and trailing roger chirp
+   * Speak Pilot voice readback in authentic Aviation English with
+   * distinct TUT-TUT radio chirps, continuous VHF carrier hiss,
+   * 400Hz cockpit alternator hum, and deep cockpit captain pitch
    */
   speakPilotVoice(text: string) {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) return
@@ -358,23 +389,25 @@ class RadioSoundFX {
       window.speechSynthesis.cancel()
       this.stopRadioCarrier()
 
-      // 1. Play opening PTT mic click & squelch burst
-      this.playMicClick()
-      this.playSquelchBurst(0.1)
+      // 1. Play opening radio "TUT-TUT" PTT key-in tone
+      this.playRadioTutTut(false)
 
-      // 2. Start continuous VHF carrier noise bed
-      this.startRadioCarrier()
+      // 2. Start continuous VHF carrier hiss bed with cockpit alternator whine
+      setTimeout(() => {
+        this.startRadioCarrier()
+      }, 70)
 
       const spokenText = this.formatRadioPhonetics(text)
       const utterance = new SpeechSynthesisUtterance(spokenText)
 
-      // Authentic cockpit radio voice parameters:
-      // Deep authoritative pitch (0.78), brisk ATC radio cadence (1.16)
-      utterance.pitch = 0.78
-      utterance.rate = 1.16
+      // Authentic English Aviation Radio speech parameters:
+      // Enforce English language (ICAO standard)
+      utterance.lang = 'en-US'
+      utterance.pitch = 0.82
+      utterance.rate = 1.15
       utterance.volume = 1.0
 
-      // Select best male cockpit pilot voice if available
+      // Select male English pilot voice for authentic captain cadence
       const voices = window.speechSynthesis.getVoices()
       const cockpitVoice =
         voices.find(
@@ -384,21 +417,22 @@ class RadioSoundFX {
               v.name.includes('Mark') ||
               v.name.includes('George') ||
               v.name.includes('Natural') ||
-              v.name.includes('Male'))
+              v.name.includes('Guy') ||
+              v.name.includes('Male') ||
+              v.name.includes('Google US English'))
         ) ||
-        voices.find((v) => v.lang.startsWith('id') || v.name.includes('Indonesia')) ||
+        voices.find((v) => v.lang.startsWith('en-US')) ||
         voices.find((v) => v.lang.startsWith('en'))
 
       if (cockpitVoice) {
         utterance.voice = cockpitVoice
-        utterance.lang = cockpitVoice.lang
+        utterance.lang = 'en-US'
       }
 
       const finishTransmission = () => {
         this.stopRadioCarrier()
-        // Radio mic unclick, trailing squelch cut and roger chirp
-        this.playSquelchBurst(0.08)
-        setTimeout(() => this.playRogerBeep(), 30)
+        // Play trailing radio "TUT-TUT" roger release chirp
+        setTimeout(() => this.playRadioTutTut(true), 20)
       }
 
       utterance.onend = finishTransmission
@@ -414,7 +448,10 @@ class RadioSoundFX {
         }
       }, maxDuration)
 
-      window.speechSynthesis.speak(utterance)
+      // Slight offset so the opening TUT-TUT chirp is distinctly heard before speech starts!
+      setTimeout(() => {
+        window.speechSynthesis.speak(utterance)
+      }, 120)
     } catch {
       this.stopRadioCarrier()
     }
