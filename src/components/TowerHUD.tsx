@@ -108,30 +108,46 @@ export const TowerHUD: React.FC = () => {
   const focusedAircraft =
     aircrafts.find((a) => a.id === focusedFlightId) || selectedAircraft || aircrafts[0]
 
-  // Find any flight that currently has a pending clearance request (prioritize focused aircraft)
-  const activePendingAircraft =
-    (focusedAircraft?.pendingClearance ? focusedAircraft : null) ||
-    aircrafts.find((a) => a.pendingClearance)
-
-  // Active Radio Speaker ('ATC' | 'PILOT' | null) subscribed live from Web Audio / Speech Engine
+  // Active Radio Speaker ('ATC' | 'PILOT' | null) & live transmission text subscribed from Web Audio Engine
   const [activeRadioSpeaker, setActiveRadioSpeaker] = useState<'ATC' | 'PILOT' | null>(null)
+  const [activeRadioText, setActiveRadioText] = useState<string>('')
   useEffect(() => {
-    return radioSound.subscribeSpeaker((speaker) => {
+    return radioSound.subscribeSpeaker((speaker, text) => {
       setActiveRadioSpeaker(speaker)
+      setActiveRadioText(text || '')
     })
   }, [])
 
-  // 2-Way Live Radio Dialogue: extract latest ATC and Pilot transmissions
+  // 2-Way Live Radio Dialogue: extract transmissions dedicated to the FOCUSED flight to prevent jumping
   const reversedComms = [...commsLog].reverse()
-  const latestAtcMsg = reversedComms.find((m) => m.sender === 'ATC')
+
+  // Latest ATC transmission specifically addressed to the focused flight (or general tower instruction)
+  const latestAtcMsg =
+    reversedComms.find(
+      (m) =>
+        m.sender === 'ATC' &&
+        (m.callsign === focusedAircraft?.id || (m.message && m.message.includes(focusedAircraft?.id || '')))
+    ) ||
+    reversedComms.find((m) => m.sender === 'ATC')
+
+  // Latest Pilot transmission specifically sent from the focused flight
   const latestPilotMsg =
-    reversedComms.find((m) => m.sender === 'PILOT' || m.sender === 'GROUND_CREW') ||
-    commsLog[commsLog.length - 1]
-  const lastMsg = commsLog[commsLog.length - 1]
-  const isAtcSpeaking = activeRadioSpeaker === 'ATC' || (!activeRadioSpeaker && lastMsg?.sender === 'ATC')
-  const isPilotSpeaking =
-    activeRadioSpeaker === 'PILOT' ||
-    (!activeRadioSpeaker && (lastMsg?.sender === 'PILOT' || lastMsg?.sender === 'GROUND_CREW' || Boolean(activePendingAircraft)))
+    reversedComms.find(
+      (m) =>
+        (m.sender === 'PILOT' || m.sender === 'GROUND_CREW') &&
+        (m.callsign === focusedAircraft?.id || (m.message && m.message.includes(focusedAircraft?.id || '')))
+    )
+
+  // Clearance is strictly evaluated for the focused flight to eliminate jumping
+  const activePendingAircraft = focusedAircraft?.pendingClearance ? focusedAircraft : null
+
+  // Other aircraft awaiting clearance in the background (shown as non-intrusive alert pill)
+  const otherPendingFlights = aircrafts.filter(
+    (a) => a.id !== focusedAircraft?.id && a.pendingClearance
+  )
+
+  const isAtcSpeaking = activeRadioSpeaker === 'ATC'
+  const isPilotSpeaking = activeRadioSpeaker === 'PILOT'
 
   return (
     <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-3 select-none overflow-hidden font-sans text-zinc-100">
@@ -573,18 +589,48 @@ export const TowerHUD: React.FC = () => {
       <footer className="w-full flex flex-col gap-2 pointer-events-auto">
         {/* 2-WAY VHF RADIO DIALOGUE & SUBTITLE CONSOLE */}
         <div className="self-center max-w-4xl w-full bg-zinc-950/95 border border-zinc-700/80 rounded-xl p-3 shadow-2xl backdrop-blur-md">
-          {/* Header: Radio Frequency & Live Status */}
-          <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-zinc-800 text-xs">
+          {/* Header: Radio Frequency, Flight Switcher Tabs & Replay Buttons */}
+          <div className="flex items-center justify-between pb-2 mb-2 border-b border-zinc-800 text-xs flex-wrap gap-2">
             <div className="flex items-center gap-2">
               <Radio className="w-4 h-4 text-emerald-400 animate-pulse" />
               <span className="font-mono font-bold text-zinc-200 tracking-wider">
-                VHF TWO-WAY RADIO • 118.200 MHz TOWER SUBTITLES
+                VHF RADIO • 118.200 MHz
               </span>
               <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-emerald-950 text-emerald-300 border border-emerald-800 flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" /> LIVE AIRBAND
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" /> LIVE
               </span>
             </div>
 
+            {/* Quick Flight Focus Switcher: Lock focus to desired flight */}
+            <div className="flex items-center gap-1.5 overflow-x-auto py-0.5">
+              <span className="text-[10px] text-zinc-400 font-mono font-semibold">FOKUS:</span>
+              {aircrafts.map((ac) => {
+                const isThisFocused = ac.id === focusedAircraft?.id
+                const hasPending = !!ac.pendingClearance
+                return (
+                  <button
+                    key={ac.id}
+                    onClick={() => {
+                      selectAircraft(ac.id)
+                      setFocusedFlightId(ac.id)
+                    }}
+                    className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold cursor-pointer transition-all flex items-center gap-1 ${
+                      isThisFocused
+                        ? 'bg-sky-600 text-white shadow ring-1 ring-sky-300'
+                        : hasPending
+                        ? 'bg-amber-950/80 border border-amber-500/80 text-amber-300 hover:bg-amber-900 animate-pulse'
+                        : 'bg-zinc-850 hover:bg-zinc-750 text-zinc-300 border border-zinc-700'
+                    }`}
+                    title={`Fokus radio & kontrol pada ${ac.id} (${ac.airline})`}
+                  >
+                    <span>{ac.id}</span>
+                    {hasPending && <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />}
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Replay Buttons */}
             <div className="flex items-center gap-2">
               {latestAtcMsg && (
                 <button
@@ -608,6 +654,40 @@ export const TowerHUD: React.FC = () => {
               )}
             </div>
           </div>
+
+          {/* Live Airband Ticker: Shows real-time transmission without mutating focused aircraft text */}
+          {activeRadioSpeaker && activeRadioText && (
+            <div className="flex items-center gap-2 px-3 py-1 mb-2 rounded bg-sky-950/80 border border-sky-500/70 text-xs font-mono animate-pulse shadow-md">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+              <span className="font-bold text-sky-300">
+                LIVE AIRBAND [{activeRadioSpeaker}]:
+              </span>
+              <span className="text-zinc-100 truncate italic">"{activeRadioText}"</span>
+            </div>
+          )}
+
+          {/* Non-Intrusive Notification for other aircraft awaiting clearance */}
+          {otherPendingFlights.length > 0 && (
+            <div className="flex items-center gap-2 px-2.5 py-1 mb-2 rounded bg-amber-950/50 border border-amber-600/60 text-[11px] font-mono text-amber-200">
+              <span className="font-semibold text-amber-300">⚠️ Pesawat lain menunggu izin:</span>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {otherPendingFlights.map((other) => (
+                  <button
+                    key={other.id}
+                    onClick={() => {
+                      selectAircraft(other.id)
+                      setFocusedFlightId(other.id)
+                    }}
+                    className="px-2 py-0.5 rounded bg-amber-500 hover:bg-amber-400 text-zinc-950 text-[10px] font-bold cursor-pointer transition-all flex items-center gap-1 shadow-sm"
+                    title={`Beralih fokus ke ${other.id}`}
+                  >
+                    <span>{other.id}: {other.pendingClearanceTitle || 'Izin'}</span>
+                    <span>↗️</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Dialogue Subtitle Body: 2 Avatars (ATC on Left, Pilot on Right) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-stretch">
@@ -666,7 +746,7 @@ export const TowerHUD: React.FC = () => {
               </div>
             </div>
 
-            {/* RIGHT: PILOT / AIRLINE CAPTAIN */}
+            {/* RIGHT: PILOT / AIRLINE CAPTAIN (Dedicated to Focused Aircraft) */}
             <div
               className={`flex items-start gap-2.5 p-2.5 rounded-lg border transition-all ${
                 isPilotSpeaking || activePendingAircraft
@@ -679,7 +759,7 @@ export const TowerHUD: React.FC = () => {
                 <div className="flex items-center justify-between gap-1 mb-1">
                   <span className="text-[11px] font-mono font-bold text-emerald-300 flex items-center gap-1.5">
                     <span>
-                      PILOT • {activePendingAircraft?.id || latestPilotMsg?.callsign || 'AIRCRAFT'}
+                      PILOT • {focusedAircraft ? `${focusedAircraft.id} (${focusedAircraft.airline})` : 'AIRCRAFT'}
                     </span>
                     {isPilotSpeaking && (
                       <span className="flex items-center gap-0.5 text-[8px] text-emerald-400 font-normal">
@@ -694,22 +774,25 @@ export const TowerHUD: React.FC = () => {
                     {latestPilotMsg?.timestamp || 'READY'}
                   </span>
                 </div>
-                <p className="text-xs text-zinc-200 font-mono leading-relaxed bg-zinc-950/70 p-2 rounded border border-zinc-800/80">
-                  {activePendingAircraft ? (
-                    <span>
-                      <strong className="text-amber-400 font-bold">
-                        [{activePendingAircraft.id}]:
-                      </strong>{' '}
-                      {latestPilotMsg?.message || activePendingAircraft.pendingClearanceTitle}
-                    </span>
+                <div className="text-xs text-zinc-200 font-mono leading-relaxed bg-zinc-950/70 p-2 rounded border border-zinc-800/80">
+                  {focusedAircraft?.pendingClearance ? (
+                    <div>
+                      <div className="inline-block px-1.5 py-0.5 mb-1 rounded bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[10px] font-bold">
+                        MEMINTA: {focusedAircraft.pendingClearanceTitle}
+                      </div>
+                      <p>
+                        {latestPilotMsg?.message ||
+                          `${focusedAircraft.id} requesting ${focusedAircraft.pendingClearanceTitle}, standing by for ATC clearance.`}
+                      </p>
+                    </div>
                   ) : latestPilotMsg ? (
-                    <span>{latestPilotMsg.message}</span>
+                    <p>{latestPilotMsg.message}</p>
                   ) : (
-                    <span className="text-zinc-500 italic">
-                      All aircraft standing by on frequency.
-                    </span>
+                    <p className="text-zinc-500 italic">
+                      {focusedAircraft?.id || 'Pesawat'} siap di frekuensi 118.200 MHz.
+                    </p>
                   )}
-                </p>
+                </div>
               </div>
 
               {/* Pilot Avatar */}
@@ -736,21 +819,21 @@ export const TowerHUD: React.FC = () => {
             </div>
           </div>
 
-          {/* Action Clearance Bar (Positioned directly under dialogue) */}
-          {activePendingAircraft?.pendingClearance && (
+          {/* Action Clearance Bar: DEDICATED SOLELY TO THE FOCUSED AIRCRAFT */}
+          {focusedAircraft?.pendingClearance && (
             <div className="flex items-center gap-2 mt-2.5 pt-2 border-t border-zinc-800">
               <button
-                onClick={() => approveClearance(activePendingAircraft.id)}
+                onClick={() => approveClearance(focusedAircraft.id)}
                 className="flex-1 py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-mono font-bold text-xs shadow-lg cursor-pointer transition-all flex items-center justify-center gap-2"
               >
                 <Check className="w-4 h-4" />
                 <span>
-                  SETUJUI: {activePendingAircraft.pendingClearanceTitle || 'IZIN OPERASIONAL'}
+                  SETUJUI [{focusedAircraft.id}]: {focusedAircraft.pendingClearanceTitle || 'IZIN OPERASIONAL'}
                 </span>
               </button>
 
               <button
-                onClick={() => denyClearance(activePendingAircraft.id)}
+                onClick={() => denyClearance(focusedAircraft.id)}
                 className="py-2 px-3 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-mono font-bold text-xs border border-zinc-700 cursor-pointer transition-all flex items-center gap-1.5"
                 title="Tahan posisi pesawat dan batalkan instruksi"
               >

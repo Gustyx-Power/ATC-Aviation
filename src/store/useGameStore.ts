@@ -1817,8 +1817,14 @@ export const useGameStore = create<GameState>((set, get) => ({
         }
       }
 
+      const stillValid = updatedAircrafts.some((a) => a.id === state.focusedFlightId)
+      const nextFocusedId = stillValid ? state.focusedFlightId : updatedAircrafts[0]?.id || null
+      const nextSelectedId = stillValid ? state.selectedAircraftId : updatedAircrafts[0]?.id || null
+
       return {
         aircrafts: updatedAircrafts,
+        focusedFlightId: nextFocusedId,
+        selectedAircraftId: nextSelectedId,
         weather: nextWeather,
         survivalTime: state.survivalTime + 1 / 60,
         airMiles: state.airMiles + awardedMiles,
