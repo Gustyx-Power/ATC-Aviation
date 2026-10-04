@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type { Aircraft, AircraftStatus, CommLogItem, GameState, RadioChannel, ViewMode, Waypoint, WeatherCondition } from '../types/atc'
 import { generateRandomAircraft } from '../utils/aircraftSpawner'
 import { radioSound } from '../utils/audioEffects'
+import { generateTechReport } from '../utils/techDiagnostics'
 
 const DEFAULT_CENTER = { x: 450, y: 350 }
 const DEFAULT_RADIUS = 280
@@ -141,6 +142,8 @@ export const useGameStore = create<GameState>((set, get) => ({
     time: '14:00',
   },
   emergencyServicesActive: false,
+  selectedTechReportAircraftId: null,
+  setSelectedTechReportAircraftId: (id: string | null) => set({ selectedTechReportAircraftId: id }),
 
   approveClearance: (id: string) => {
     const ac = get().aircrafts.find((a) => a.id === id)
@@ -157,6 +160,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       get().startRefueling(id)
     } else if (clearance === 'maintenance_check') {
       get().startTechnicalCheck(id)
+    } else if (clearance === 'tech_verdict') {
+      get().resolveTechVerdict(id, 'airworthy')
     } else if (clearance === 'boarding') {
       get().startBoarding(id)
     } else if (clearance === 'pushback') {
@@ -197,6 +202,8 @@ export const useGameStore = create<GameState>((set, get) => ({
     radioSound.playRogerBeep()
     if (ac.status === 'approach' || ac.pendingClearance === 'landing') {
       get().orderHoldInAir(id)
+    } else if (ac.pendingClearance === 'tech_verdict') {
+      get().resolveTechVerdict(id, 'hangar')
     } else {
       atcInstruction(`${id}, negative clearance at this time, maintain current position.`)
       pilotReadback(`${id}, clearance denied by ATC, holding position, standing by.`)
@@ -423,7 +430,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   startTechnicalCheck: (id: string) => {
     radioSound.playRogerBeep()
     atcInstruction(`${id}, maintenance walkaround inspection approved.`)
-    pilotReadback(`${id}, ground engineers conducting pre-flight inspection and maintenance checks.`)
+    radioSound.speakGroundCrewVoice(`${id}, ground engineers conducting pre-flight inspection and telemetry diagnostics.`)
 
     set((state) => ({
       aircrafts: state.aircrafts.map((ac) =>
@@ -444,12 +451,164 @@ export const useGameStore = create<GameState>((set, get) => ({
           timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
           sender: 'GROUND_CREW' as const,
           callsign: id,
-          message: `Aircraft technicians conducting pre-flight walkaround on ${id}.`,
+          message: `Aircraft technicians conducting pre-flight walkaround and telemetry logging on ${id}.`,
           type: 'info' as const,
         },
       ].slice(-50),
-      tutorialText: `Pengecekan teknis ${id} sedang berlangsung. Setelah lolos, klik [🚶 Naikkan Penumpang]!`,
+      tutorialText: `Pengecekan teknis ${id} sedang berlangsung. Teknisi akan mengunggah data statistik telemetri setelah selesai!`,
     }))
+  },
+
+  resolveTechVerdict: (id: string, decision: 'airworthy' | 'hangar') => {
+    const ac = get().aircrafts.find((a) => a.id === id)
+    if (!ac) return
+    radioSound.playRogerBeep()
+
+    const report = ac.techReport || generateTechReport(ac)
+    const isDefective = report.isDefective
+
+    if (decision === 'airworthy') {
+      // ATC clears the aircraft for passenger boarding
+      atcInstruction(`${id}, technical telemetry accepted, aircraft cleared for passenger boarding.`)
+      radioSound.speakPilotVoice(`${id}, roger Tower, commencing passenger boarding.`)
+
+      if (!isDefective) {
+        // Player correctly verified healthy telemetry!
+        const successMsg: CommLogItem = {
+          id: `tech-verdict-${Date.now()}`,
+          timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
+          sender: 'SYSTEM',
+          callsign: id,
+          message: `KEPUTUSAN TEPAT ATC: Evaluasi telemetri ${id} akurat. Seluruh parameter normal. Boarding 180 penumpang dimulai (+15 Mil Udara).`,
+          type: 'info',
+        }
+        set((state) => ({
+          airMiles: state.airMiles + 15,
+          score: state.score + 50,
+          aircrafts: state.aircrafts.map((a) =>
+            a.id === id
+              ? {
+                  ...a,
+                  status: 'boarding',
+                  serviceProgress: 0,
+                  pendingClearance: undefined,
+                  pendingClearanceTitle: undefined,
+                  technicalHealth: 100,
+                  turnaround: {
+                    ...(a.turnaround || {}),
+                    techInspected: true,
+                  },
+                }
+              : a
+          ),
+          commsLog: [...state.commsLog, successMsg].slice(-50),
+          selectedTechReportAircraftId: null,
+          tutorialText: `Boarding ${id} sedang berlangsung. Setelah 180 pax naik, berikan izin [🚜 Dorongan Mundur (Pushback)]!`,
+        }))
+      } else {
+        // Player failed to spot the anomaly in the report!
+        const alertMsg: CommLogItem = {
+          id: `tech-verdict-${Date.now()}`,
+          timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
+          sender: 'SYSTEM',
+          callsign: id,
+          message: `⚠️ KELALAIAN EVALUASI ATC: Anda meloloskan ${id} yang memiliki anomali (${report.defectReason})! Catatan keselamatan bandara tercemar (-25 Mil Udara).`,
+          type: 'alert',
+        }
+        set((state) => ({
+          airMiles: Math.max(0, state.airMiles - 25),
+          aircrafts: state.aircrafts.map((a) =>
+            a.id === id
+              ? {
+                  ...a,
+                  status: 'boarding',
+                  serviceProgress: 0,
+                  pendingClearance: undefined,
+                  pendingClearanceTitle: undefined,
+                  technicalHealth: 60,
+                  emergencyReason: report.defectReason,
+                  turnaround: {
+                    ...(a.turnaround || {}),
+                    techInspected: true,
+                  },
+                }
+              : a
+          ),
+          commsLog: [...state.commsLog, alertMsg].slice(-50),
+          selectedTechReportAircraftId: null,
+        }))
+      }
+    } else {
+      // ATC rejects flight clearance and routes to Hangar for maintenance
+      atcInstruction(`${id}, technical data review rejected, hold boarding, ground tug taxi to Hangar 1.`)
+      radioSound.speakGroundCrewVoice(`${id}, copied Tower. Holding boarding, ground tug towing aircraft to Hangar 1.`)
+
+      if (isDefective) {
+        // Player successfully caught the defect!
+        const successMsg: CommLogItem = {
+          id: `tech-verdict-${Date.now()}`,
+          timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
+          sender: 'SYSTEM',
+          callsign: id,
+          message: `🏆 KEPUTUSAN CEMERLANG ATC: Anda jeli mendeteksi anomali (${report.defectReason}) pada ${id}! Potensi insiden di udara berhasil dicegah (+40 Mil Udara & Poin Keselamatan).`,
+          type: 'info',
+        }
+        set((state) => ({
+          airMiles: state.airMiles + 40,
+          score: state.score + 100,
+          aircrafts: state.aircrafts.map((a) =>
+            a.id === id
+              ? {
+                  ...a,
+                  status: 'taxi_to_hangar',
+                  assignedGate: 'Hangar 1',
+                  gate: 'Hangar 1',
+                  pendingClearance: undefined,
+                  pendingClearanceTitle: undefined,
+                  turnaround: {
+                    ...(a.turnaround || {}),
+                    techInspected: true,
+                  },
+                }
+              : a
+          ),
+          commsLog: [...state.commsLog, successMsg].slice(-50),
+          selectedTechReportAircraftId: null,
+          tutorialText: `${id} sedang ditarik menuju Hangar 1 untuk perbaikan mendalam.`,
+        }))
+      } else {
+        // Player was overly cautious on a healthy plane
+        const cautionMsg: CommLogItem = {
+          id: `tech-verdict-${Date.now()}`,
+          timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
+          sender: 'SYSTEM',
+          callsign: id,
+          message: `LAPORAN TEKNISI HANGAR: Inspeksi ulang membuktikan seluruh sistem ${id} sebenarnya dalam batas toleransi normal. Pesawat disiapkan kembali (+5 Mil Udara prosedur kehati-hatian).`,
+          type: 'info',
+        }
+        set((state) => ({
+          airMiles: state.airMiles + 5,
+          aircrafts: state.aircrafts.map((a) =>
+            a.id === id
+              ? {
+                  ...a,
+                  status: 'taxi_to_hangar',
+                  assignedGate: 'Hangar 1',
+                  gate: 'Hangar 1',
+                  pendingClearance: undefined,
+                  pendingClearanceTitle: undefined,
+                  turnaround: {
+                    ...(a.turnaround || {}),
+                    techInspected: true,
+                  },
+                }
+              : a
+          ),
+          commsLog: [...state.commsLog, cautionMsg].slice(-50),
+          selectedTechReportAircraftId: null,
+        }))
+      }
+    }
   },
 
   startBoarding: (id: string) => {
@@ -1177,27 +1336,28 @@ export const useGameStore = create<GameState>((set, get) => ({
             const stepRate = 0.040 * (state.simSpeed || 1)
             if (serviceProg < 100) {
               serviceProg = Math.min(100, serviceProg + stepRate)
-              return { ...ac, serviceProgress: serviceProg, technicalHealth: 100 }
+              return { ...ac, serviceProgress: serviceProg }
             } else {
-              // FINISHED: Tech check complete, STOP at 100% and request boarding clearance
+              // FINISHED: Tech check complete! Generate technician telemetry report (raw metrics without telling player if safe or not)
+              const techReport = ac.techReport || generateTechReport(ac)
               status = 'at_gate'
               serviceProg = 100
               const turnaround = {
                 ...(ac.turnaround || {}),
                 techInspected: true,
               }
-              pendingClearance = 'boarding'
-              pendingClearanceTitle = 'Izin Boarding Penumpang'
+              pendingClearance = 'tech_verdict'
+              pendingClearanceTitle = 'Tinjau Statistik Teknis & Ambil Keputusan'
               radioSound.playRogerBeep()
               if (ac.id === state.focusedFlightId) {
-                pilotReadback(`${ac.id}, technical check completed, aircraft airworthy, requesting passenger boarding.`)
+                radioSound.speakGroundCrewVoice(`${ac.id}, pre-flight inspection complete, telemetry logged to console. Review technical report and advise disposition.`)
               }
               const logMsg: CommLogItem = {
                 id: `tech-done-${Date.now()}`,
                 timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
-                sender: 'PILOT' as const,
+                sender: 'GROUND_CREW' as const,
                 callsign: ac.id,
-                message: `${ac.id}: Technical walkaround completed 100%. Airworthiness certified. Requesting clearance for passenger boarding.`,
+                message: `Jakarta Tower, ${ac.id} pre-flight inspection completed 100%. Diagnostic telemetry uploaded to your terminal. Review report statistics and instruct whether to clear for boarding or route to hangar.`,
                 type: 'info' as const,
               }
               updatedComms = [...updatedComms, logMsg]
@@ -1205,10 +1365,10 @@ export const useGameStore = create<GameState>((set, get) => ({
                 ...ac,
                 status,
                 serviceProgress: 100,
-                technicalHealth: 100,
                 turnaround,
                 pendingClearance,
                 pendingClearanceTitle,
+                techReport,
               }
             }
           }

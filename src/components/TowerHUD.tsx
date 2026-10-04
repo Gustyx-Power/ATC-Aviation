@@ -18,10 +18,12 @@ import {
   Radio,
   Check,
   X,
+  FileText,
 } from 'lucide-react'
 import { useGameStore } from '../store/useGameStore'
 import { useVoiceCommand } from '../hooks/useVoiceCommand'
 import { radioSound } from '../utils/audioEffects'
+import { TechDiagnosticsModal } from './TechDiagnosticsModal'
 
 export const TowerHUD: React.FC = () => {
   const aircrafts = useGameStore((state) => state.aircrafts)
@@ -31,6 +33,8 @@ export const TowerHUD: React.FC = () => {
   const setFocusedFlightId = useGameStore((state) => state.setFocusedFlightId)
   const approveClearance = useGameStore((state) => state.approveClearance)
   const denyClearance = useGameStore((state) => state.denyClearance)
+  const setSelectedTechReportAircraftId = useGameStore((state) => state.setSelectedTechReportAircraftId)
+  const resolveTechVerdict = useGameStore((state) => state.resolveTechVerdict)
   const airMiles = useGameStore((state) => state.airMiles)
   const airportLevel = useGameStore((state) => state.airportLevel)
   const score = useGameStore((state) => state.score)
@@ -108,8 +112,8 @@ export const TowerHUD: React.FC = () => {
   const focusedAircraft =
     aircrafts.find((a) => a.id === focusedFlightId) || selectedAircraft || aircrafts[0]
 
-  // Active Radio Speaker ('ATC' | 'PILOT' | null) & live transmission text subscribed from Web Audio Engine
-  const [activeRadioSpeaker, setActiveRadioSpeaker] = useState<'ATC' | 'PILOT' | null>(null)
+  // Active Radio Speaker ('ATC' | 'PILOT' | 'GROUND_CREW' | null) & live transmission text subscribed from Web Audio Engine
+  const [activeRadioSpeaker, setActiveRadioSpeaker] = useState<'ATC' | 'PILOT' | 'GROUND_CREW' | null>(null)
   const [activeRadioText, setActiveRadioText] = useState<string>('')
   useEffect(() => {
     return radioSound.subscribeSpeaker((speaker, text) => {
@@ -147,7 +151,13 @@ export const TowerHUD: React.FC = () => {
   )
 
   const isAtcSpeaking = activeRadioSpeaker === 'ATC'
-  const isPilotSpeaking = activeRadioSpeaker === 'PILOT'
+  const isGroundCrewSpeaking = activeRadioSpeaker === 'GROUND_CREW'
+  const isPilotSpeaking = activeRadioSpeaker === 'PILOT' || isGroundCrewSpeaking
+  const isGroundCrewActive =
+    isGroundCrewSpeaking ||
+    latestPilotMsg?.sender === 'GROUND_CREW' ||
+    focusedAircraft?.pendingClearance === 'tech_verdict' ||
+    focusedAircraft?.status === 'maintenance_check'
 
   return (
     <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-3 select-none overflow-hidden font-sans text-zinc-100">
@@ -483,26 +493,51 @@ export const TowerHUD: React.FC = () => {
 
                     {/* Pending Request Indicator */}
                     {plane.pendingClearance && (
-                      <div className="mt-1.5 pt-1 border-t border-zinc-800 flex items-center justify-between">
+                      <div className="mt-1.5 pt-1 border-t border-zinc-800 flex items-center justify-between gap-1">
                         <span className="text-[9px] text-amber-300 font-bold truncate">
                           ⏳ {plane.pendingClearanceTitle || 'Menunggu Persetujuan ATC'}
                         </span>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            approveClearance(plane.id)
-                          }}
-                          className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[9px] font-bold cursor-pointer"
-                        >
-                          Setujui
-                        </button>
+                        {plane.pendingClearance === 'tech_verdict' ? (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setSelectedTechReportAircraftId(plane.id)
+                            }}
+                            className="px-2 py-0.5 rounded bg-sky-600 hover:bg-sky-500 text-white text-[9px] font-bold cursor-pointer shrink-0"
+                            title="Buka Lembar Telemetri Teknisi"
+                          >
+                            📋 Data
+                          </button>
+                        ) : (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              approveClearance(plane.id)
+                            }}
+                            className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[9px] font-bold cursor-pointer shrink-0"
+                          >
+                            Setujui
+                          </button>
+                        )}
                       </div>
                     )}
 
                     <div className="flex items-center justify-between text-[9px] text-zinc-500 mt-1 font-mono">
                       <span>Pax: {plane.passengers?.current || 0}/180</span>
                       <span>Fuel: {plane.fuel}%</span>
-                      <span>Teknis: {plane.technicalHealth}%</span>
+                      {plane.techReport ? (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setSelectedTechReportAircraftId(plane.id)
+                          }}
+                          className="text-sky-400 hover:text-sky-300 underline font-bold cursor-pointer"
+                        >
+                          📋 Telemetri
+                        </button>
+                      ) : (
+                        <span>Teknis: Siap</span>
+                      )}
                     </div>
                   </div>
                 )
@@ -746,26 +781,52 @@ export const TowerHUD: React.FC = () => {
               </div>
             </div>
 
-            {/* RIGHT: PILOT / AIRLINE CAPTAIN (Dedicated to Focused Aircraft) */}
+            {/* RIGHT: PILOT / GROUND CREW (Dedicated to Focused Aircraft) */}
             <div
               className={`flex items-start gap-2.5 p-2.5 rounded-lg border transition-all ${
-                isPilotSpeaking || activePendingAircraft
+                isGroundCrewActive
+                  ? isPilotSpeaking || activePendingAircraft
+                    ? 'bg-amber-950/40 border-amber-500/60 shadow-[0_0_15px_rgba(245,158,11,0.2)]'
+                    : 'bg-zinc-900/60 border-amber-900/40'
+                  : isPilotSpeaking || activePendingAircraft
                   ? 'bg-emerald-950/40 border-emerald-500/60 shadow-[0_0_15px_rgba(16,185,129,0.15)]'
                   : 'bg-zinc-900/60 border-zinc-800/80'
               }`}
             >
-              {/* Pilot Subtitle Text */}
+              {/* Pilot / Ground Crew Subtitle Text */}
               <div className="flex-1 min-w-0 order-2 md:order-1 text-right md:text-left">
                 <div className="flex items-center justify-between gap-1 mb-1">
-                  <span className="text-[11px] font-mono font-bold text-emerald-300 flex items-center gap-1.5">
+                  <span
+                    className={`text-[11px] font-mono font-bold flex items-center gap-1.5 ${
+                      isGroundCrewActive ? 'text-amber-300' : 'text-emerald-300'
+                    }`}
+                  >
                     <span>
-                      PILOT • {focusedAircraft ? `${focusedAircraft.id} (${focusedAircraft.airline})` : 'AIRCRAFT'}
+                      {isGroundCrewActive
+                        ? `TEKNISI DARAT • ${focusedAircraft ? `${focusedAircraft.id} (Ramp Tech)` : 'MAINTENANCE'}`
+                        : `PILOT • ${focusedAircraft ? `${focusedAircraft.id} (${focusedAircraft.airline})` : 'AIRCRAFT'}`}
                     </span>
                     {isPilotSpeaking && (
-                      <span className="flex items-center gap-0.5 text-[8px] text-emerald-400 font-normal">
-                        <span className="inline-block w-1 h-2 bg-emerald-400 animate-bounce" />
-                        <span className="inline-block w-1 h-3 bg-emerald-400 animate-bounce [animation-delay:0.1s]" />
-                        <span className="inline-block w-1 h-1.5 bg-emerald-400 animate-bounce [animation-delay:0.2s]" />
+                      <span
+                        className={`flex items-center gap-0.5 text-[8px] font-normal ${
+                          isGroundCrewActive ? 'text-amber-400' : 'text-emerald-400'
+                        }`}
+                      >
+                        <span
+                          className={`inline-block w-1 h-2 animate-bounce ${
+                            isGroundCrewActive ? 'bg-amber-400' : 'bg-emerald-400'
+                          }`}
+                        />
+                        <span
+                          className={`inline-block w-1 h-3 animate-bounce [animation-delay:0.1s] ${
+                            isGroundCrewActive ? 'bg-amber-400' : 'bg-emerald-400'
+                          }`}
+                        />
+                        <span
+                          className={`inline-block w-1 h-1.5 animate-bounce [animation-delay:0.2s] ${
+                            isGroundCrewActive ? 'bg-amber-400' : 'bg-emerald-400'
+                          }`}
+                        />
                         RX
                       </span>
                     )}
@@ -777,8 +838,16 @@ export const TowerHUD: React.FC = () => {
                 <div className="text-xs text-zinc-200 font-mono leading-relaxed bg-zinc-950/70 p-2 rounded border border-zinc-800/80">
                   {focusedAircraft?.pendingClearance ? (
                     <div>
-                      <div className="inline-block px-1.5 py-0.5 mb-1 rounded bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[10px] font-bold">
-                        MEMINTA: {focusedAircraft.pendingClearanceTitle}
+                      <div
+                        className={`inline-block px-1.5 py-0.5 mb-1 rounded text-[10px] font-bold border ${
+                          isGroundCrewActive
+                            ? 'bg-amber-500/20 border-amber-500/40 text-amber-300'
+                            : 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
+                        }`}
+                      >
+                        {focusedAircraft.pendingClearance === 'tech_verdict'
+                          ? 'LAPORAN TEKNISI MASUK: TINJAU DATA'
+                          : `MEMINTA: ${focusedAircraft.pendingClearanceTitle}`}
                       </div>
                       <p>
                         {latestPilotMsg?.message ||
@@ -795,25 +864,34 @@ export const TowerHUD: React.FC = () => {
                 </div>
               </div>
 
-              {/* Pilot Avatar */}
+              {/* Avatar (Pilot / Technician) */}
               <div className="relative shrink-0 order-1 md:order-2">
                 <img
                   src="/pilot_avatar.jpg"
-                  alt="Airline Captain"
+                  alt={isGroundCrewActive ? 'Ground Technician' : 'Airline Captain'}
                   className={`w-12 h-12 rounded-full object-cover shadow-md transition-all ${
-                    isPilotSpeaking || activePendingAircraft
+                    isGroundCrewActive
+                      ? isPilotSpeaking || activePendingAircraft
+                        ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-zinc-950 scale-105'
+                        : 'border-2 border-amber-700/60 opacity-90'
+                      : isPilotSpeaking || activePendingAircraft
                       ? 'ring-2 ring-emerald-400 ring-offset-2 ring-offset-zinc-950 scale-105'
                       : 'border-2 border-zinc-700 opacity-90'
                   }`}
                 />
                 <div
-                  className={`absolute -bottom-1 -right-1 px-1 py-0.2 rounded text-[8px] font-mono font-black border ${
-                    isPilotSpeaking || activePendingAircraft
+                  className={`absolute -bottom-1 -right-1 px-1 py-0.2 rounded text-[8px] font-mono font-black border flex items-center gap-0.5 ${
+                    isGroundCrewActive
+                      ? isPilotSpeaking || activePendingAircraft
+                        ? 'bg-amber-500 text-zinc-950 border-amber-300 animate-pulse'
+                        : 'bg-amber-900/80 text-amber-300 border-amber-700'
+                      : isPilotSpeaking || activePendingAircraft
                       ? 'bg-emerald-500 text-zinc-950 border-emerald-300 animate-pulse'
                       : 'bg-zinc-800 text-zinc-400 border-zinc-700'
                   }`}
                 >
-                  PILOT
+                  {isGroundCrewActive && <Wrench className="w-2 h-2" />}
+                  <span>{isGroundCrewActive ? 'TEKNISI' : 'PILOT'}</span>
                 </div>
               </div>
             </div>
@@ -822,24 +900,60 @@ export const TowerHUD: React.FC = () => {
           {/* Action Clearance Bar: DEDICATED SOLELY TO THE FOCUSED AIRCRAFT */}
           {focusedAircraft?.pendingClearance && (
             <div className="flex items-center gap-2 mt-2.5 pt-2 border-t border-zinc-800">
-              <button
-                onClick={() => approveClearance(focusedAircraft.id)}
-                className="flex-1 py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-mono font-bold text-xs shadow-lg cursor-pointer transition-all flex items-center justify-center gap-2"
-              >
-                <Check className="w-4 h-4" />
-                <span>
-                  SETUJUI [{focusedAircraft.id}]: {focusedAircraft.pendingClearanceTitle || 'IZIN OPERASIONAL'}
-                </span>
-              </button>
+              {focusedAircraft.pendingClearance === 'tech_verdict' ? (
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full">
+                  {/* Button to open raw diagnostic statistics */}
+                  <button
+                    onClick={() => setSelectedTechReportAircraftId(focusedAircraft.id)}
+                    className="flex-1 py-2 px-3 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-mono font-bold text-xs shadow-lg cursor-pointer transition-all flex items-center justify-center gap-2 animate-pulse"
+                    title="Buka laporan telemetri teknisi untuk membaca statistik lengkap"
+                  >
+                    <FileText className="w-4 h-4" />
+                    <span>📋 BUKA LEMBAR STATISTIK TEKNISI [{focusedAircraft.id}]</span>
+                  </button>
 
-              <button
-                onClick={() => denyClearance(focusedAircraft.id)}
-                className="py-2 px-3 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-mono font-bold text-xs border border-zinc-700 cursor-pointer transition-all flex items-center gap-1.5"
-                title="Tahan posisi pesawat dan batalkan instruksi"
-              >
-                <X className="w-4 h-4 text-rose-400" />
-                <span>TAHAN</span>
-              </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => resolveTechVerdict(focusedAircraft.id, 'airworthy')}
+                      className="py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-mono font-bold text-xs shadow-lg cursor-pointer transition-all flex items-center gap-1.5"
+                      title="Setujui pesawat untuk boarding penumpang (Putusan mandiri ATC tanpa petunjuk kelayakan)"
+                    >
+                      <Check className="w-4 h-4" />
+                      <span>✓ LOLOSKAN KE BOARDING</span>
+                    </button>
+
+                    <button
+                      onClick={() => resolveTechVerdict(focusedAircraft.id, 'hangar')}
+                      className="py-2 px-3 rounded-lg bg-rose-700 hover:bg-rose-600 text-white font-mono font-bold text-xs border border-rose-500 cursor-pointer transition-all flex items-center gap-1.5"
+                      title="Tolak penerbangan & rujuk ke hanggar untuk perbaikan mendalam"
+                    >
+                      <Wrench className="w-4 h-4" />
+                      <span>🛠 DEREK KE HANGAR</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <button
+                    onClick={() => approveClearance(focusedAircraft.id)}
+                    className="flex-1 py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-mono font-bold text-xs shadow-lg cursor-pointer transition-all flex items-center justify-center gap-2"
+                  >
+                    <Check className="w-4 h-4" />
+                    <span>
+                      SETUJUI [{focusedAircraft.id}]: {focusedAircraft.pendingClearanceTitle || 'IZIN OPERASIONAL'}
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={() => denyClearance(focusedAircraft.id)}
+                    className="py-2 px-3 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-mono font-bold text-xs border border-zinc-700 cursor-pointer transition-all flex items-center gap-1.5"
+                    title="Tahan posisi pesawat dan batalkan instruksi"
+                  >
+                    <X className="w-4 h-4 text-rose-400" />
+                    <span>TAHAN</span>
+                  </button>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -957,16 +1071,36 @@ export const TowerHUD: React.FC = () => {
 
                 {/* 4. Tech Check */}
                 <div
-                  className={`p-1 rounded border ${
+                  onClick={() => {
+                    if (focusedAircraft.techReport) {
+                      setSelectedTechReportAircraftId(focusedAircraft.id)
+                    }
+                  }}
+                  className={`p-1 rounded border transition-all ${
+                    focusedAircraft.techReport ? 'cursor-pointer hover:border-amber-400' : ''
+                  } ${
                     focusedAircraft.turnaround?.techInspected
                       ? 'bg-emerald-950/40 border-emerald-500/60 text-emerald-300'
+                      : focusedAircraft.pendingClearance === 'tech_verdict'
+                      ? 'bg-amber-950/70 border-amber-400 text-amber-200 animate-pulse font-bold'
                       : focusedAircraft.status === 'maintenance_check'
                       ? 'bg-sky-950/60 border-sky-400 text-sky-200 animate-pulse'
                       : 'bg-zinc-900 border-zinc-800 text-zinc-500'
                   }`}
+                  title={
+                    focusedAircraft.techReport
+                      ? 'Klik untuk membuka lembar statistik telemetri teknisi'
+                      : 'Pemeriksaan teknis kelaikan udara'
+                  }
                 >
                   <span className="block font-bold">4. Teknis</span>
-                  <span>{focusedAircraft.turnaround?.techInspected ? '✓' : '○'}</span>
+                  <span>
+                    {focusedAircraft.turnaround?.techInspected
+                      ? '✓'
+                      : focusedAircraft.pendingClearance === 'tech_verdict'
+                      ? '📋 Data'
+                      : '○'}
+                  </span>
                 </div>
 
                 {/* 5. Boarding */}
@@ -1063,6 +1197,9 @@ export const TowerHUD: React.FC = () => {
           </div>
         </div>
       </footer>
+
+      {/* Ground Crew Telemetry & Diagnostics Modal (No clues, player decides) */}
+      <TechDiagnosticsModal />
     </div>
   )
 }

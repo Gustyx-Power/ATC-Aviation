@@ -2,7 +2,7 @@
  * Synthetic VHF radio sound & ATC simulation sound effects using Web Audio API
  */
 
-export type RadioRole = 'ATC' | 'PILOT'
+export type RadioRole = 'ATC' | 'PILOT' | 'GROUND_CREW'
 
 export interface QueuedTransmission {
   role: RadioRole
@@ -445,6 +445,13 @@ class RadioSoundFX {
     this.enqueueTransmission('PILOT', text)
   }
 
+  /**
+   * Enqueue ground engineer / maintenance crew transmission into the FIFO radio queue.
+   */
+  speakGroundCrewVoice(text: string) {
+    this.enqueueTransmission('GROUND_CREW', text)
+  }
+
   private enqueueTransmission(role: RadioRole, text: string) {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) return
     if (!text || text.trim().length === 0) return
@@ -605,6 +612,17 @@ class RadioSoundFX {
         if (atcVoice) {
           utterance.voice = atcVoice
           utterance.lang = atcVoice.lang || 'en-US'
+        }
+      } else if (role === 'GROUND_CREW') {
+        // Ground Engineer / Maintenance Crew: Direct, professional male voice
+        utterance.lang = 'en-US'
+        utterance.pitch = 0.88
+        utterance.rate = 1.10
+
+        const pilotVoice = this.getPilotVoice(voices)
+        if (pilotVoice) {
+          utterance.voice = pilotVoice
+          utterance.lang = pilotVoice.lang || 'en-US'
         }
       } else {
         // Pilot Captain: Authoritative, steady, deeper male voice

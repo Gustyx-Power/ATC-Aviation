@@ -45,6 +45,7 @@ export type PendingClearanceType =
   | 'cleaning'
   | 'refueling'
   | 'maintenance_check'
+  | 'tech_verdict'
   | 'boarding'
   | 'pushback'
   | 'taxi_to_runway'
@@ -52,6 +53,34 @@ export type PendingClearanceType =
   | 'overhaul'
   | 'avionics_check'
   | 'c_check';
+
+export interface AircraftTechReport {
+  timestamp: string;
+  inspector: string;
+  // Hydraulic systems
+  sysAPressure: number;       // PSI (Ref: 2800 - 3100 PSI)
+  sysBPressure: number;       // PSI (Ref: 2800 - 3100 PSI)
+  brakeAccumulator: number;   // PSI (Ref: 2700 - 3100 PSI)
+  // Powerplant / Turbofans
+  engine1Vibration: number;   // mils/s (Ref: < 1.5 mils/s)
+  engine2Vibration: number;   // mils/s (Ref: < 1.5 mils/s)
+  egtMarginDeg: number;       // °C (Ref: > +25 °C)
+  oilPressurePsi: number;     // PSI (Ref: 45 - 65 PSI)
+  // Landing gear & braking
+  noseGearPsi: number;        // PSI (Ref: 165 - 180 PSI)
+  mainGearPsi: number;        // PSI (Ref: 200 - 215 PSI)
+  brakeWearPinMm: number;     // mm (Ref: > 2.5 mm)
+  // Avionics & sensors
+  pitotHeat: 'OPERATIONAL' | 'DEGRADED';      // Ref: OPERATIONAL
+  transponderTCAS: 'PASS' | 'INTERMITTENT';   // Ref: PASS
+  // Fuel & drain
+  fuelWaterDrain: 'CLEAR' | 'CONTAMINATED';   // Ref: CLEAR
+  apuBleedPressure: number;   // PSI (Ref: 35 - 48 PSI)
+  inspectorNotes: string;
+  // Ground truth evaluation (hidden from player)
+  isDefective: boolean;
+  defectReason?: string;
+}
 
 export interface Aircraft {
   id: string;              // e.g., "GIA123"
@@ -108,6 +137,7 @@ export interface Aircraft {
     avionicsCalibrated?: boolean;
     cCheckPassed?: boolean;
   };
+  techReport?: AircraftTechReport;
 }
 
 export interface Runway {
@@ -219,6 +249,11 @@ export interface GameState {
   triggerEmergency: (id?: string) => void;
   dispatchEmergencyServices: (id: string) => void;
   setWeatherCondition: (condition: WeatherCondition) => void;
+
+  // Technical Telemetry & Engineer Report
+  selectedTechReportAircraftId: string | null;
+  setSelectedTechReportAircraftId: (id: string | null) => void;
+  resolveTechVerdict: (id: string, decision: 'airworthy' | 'hangar') => void;
 
   // View & UI
   setViewMode: (mode: ViewMode) => void;
