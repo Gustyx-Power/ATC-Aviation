@@ -111,8 +111,20 @@ export const Sidebar: React.FC<SidebarProps> = ({ fps }) => {
           >
             <HelpCircle className="w-3.5 h-3.5" />
           </button>
+          <button
+            onClick={() => {
+              import('../utils/audioEffects').then(({ radioSound }) => {
+                radioSound.playRogerBeep()
+              })
+            }}
+            className="p-1.5 rounded bg-gray-800/80 hover:bg-[#00ffaa]/20 text-[#00ffaa] border border-gray-700 transition-colors"
+            title="Test VHF Radio Squelch & Roger Beep"
+          >
+            <Volume2 className="w-3.5 h-3.5" />
+          </button>
           <div className="px-2 py-0.5 rounded bg-black/40 border border-gray-800 text-[10px] text-gray-300">
             {fps} FPS
+
           </div>
           <button
             onClick={togglePause}
