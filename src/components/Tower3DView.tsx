@@ -367,6 +367,23 @@ export const Tower3DView: React.FC = () => {
     fuelTruck.position.set(-180, 0, -35) // Servicing Gate 1 area
     gseGroup.add(fuelTruck)
 
+    // Pushback Tractor Tug
+    const pushbackTug = new THREE.Group()
+    const tugBodyGeo = new THREE.BoxGeometry(6, 2.8, 8)
+    const tugMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.4 })
+    const tugBody = new THREE.Mesh(tugBodyGeo, tugMat)
+    tugBody.position.y = 1.4
+    tugBody.castShadow = true
+    pushbackTug.add(tugBody)
+    const tugCabGeo = new THREE.BoxGeometry(4.5, 2.2, 3.5)
+    const tugCabMat = new THREE.MeshStandardMaterial({ color: 0x1e293b })
+    const tugCab = new THREE.Mesh(tugCabGeo, tugCabMat)
+    tugCab.position.set(0, 3.2, 1)
+    pushbackTug.add(tugCab)
+    pushbackTug.position.set(-230, 0, -68)
+    pushbackTug.visible = false
+    gseGroup.add(pushbackTug)
+
     scene.add(gseGroup)
 
     // ----------------------------------------------------
@@ -686,6 +703,31 @@ export const Tower3DView: React.FC = () => {
         beaconR.visible = false
         beaconB.visible = false
         fireTruck.position.set(-480, 0, -200)
+      }
+
+      // Fuel Truck Service Animation
+      const fuelingAc = aircrafts.find((a) => a.status === 'refueling')
+      if (fuelingAc && fuelingAc.pos3d) {
+        fuelTruck.position.set(fuelingAc.pos3d.x + 14, 0, fuelingAc.pos3d.z + 4)
+        fuelTruck.rotation.y = -Math.PI / 4
+      } else {
+        fuelTruck.position.set(-180, 0, -35)
+        fuelTruck.rotation.y = 0
+      }
+
+      // Pushback Tug Service Animation
+      const pushAc = aircrafts.find((a) => a.status === 'pushback')
+      if (pushAc && pushAc.pos3d) {
+        pushbackTug.visible = true
+        const pushHeadingRad = ((pushAc.heading || 0) * Math.PI) / 180
+        pushbackTug.position.set(
+          pushAc.pos3d.x - Math.sin(pushHeadingRad) * 16,
+          0,
+          pushAc.pos3d.z - Math.cos(pushHeadingRad) * 16
+        )
+        pushbackTug.rotation.y = -pushHeadingRad + Math.PI / 2
+      } else {
+        pushbackTug.visible = false
       }
 
       // Camera Modes

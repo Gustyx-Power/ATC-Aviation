@@ -55,6 +55,13 @@ export interface Aircraft {
   passengers?: { current: number; max: number };
   technicalHealth?: number; // 0 to 100%
   emergencyReason?: string; // e.g. "Kerusakan Mesin 1", "Bahan Bakar Kritis"
+  turnaround?: {
+    deboarded?: boolean;
+    cabinCleaned?: boolean;
+    refueled?: boolean;
+    techInspected?: boolean;
+    boarded?: boolean;
+  };
 }
 
 export interface Runway {
@@ -129,6 +136,8 @@ export interface GameState {
   setAircraftAltitude: (id: string, altitude: number) => void;
   addCommLog: (item: Omit<CommLogItem, 'id' | 'timestamp'>) => void;
   togglePause: () => void;
+  simSpeed: number; // 1 (normal/realistic), 2 (fast), 4 (express)
+  setSimSpeed: (speed: number) => void;
   setMicActive: (active: boolean) => void;
   resetGame: () => void;
 

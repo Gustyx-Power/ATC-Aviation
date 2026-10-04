@@ -49,6 +49,8 @@ export const TowerHUD: React.FC = () => {
   const spawnAircraft = useGameStore((state) => state.spawnAircraft)
   const weather = useGameStore((state) => state.weather)
   const setWeatherCondition = useGameStore((state) => state.setWeatherCondition)
+  const simSpeed = useGameStore((state) => state.simSpeed)
+  const setSimSpeed = useGameStore((state) => state.setSimSpeed)
 
   // Ground Turnaround & Clearance Actions
   const assignDestination = useGameStore((state) => state.assignDestination)
@@ -165,6 +167,38 @@ export const TowerHUD: React.FC = () => {
 
         {/* Right: Emergency Simulation Trigger & Runway Status */}
         <div className="flex items-center gap-2">
+          {/* Simulation Speed Controls */}
+          <div className="flex items-center rounded-lg bg-[#071320]/85 border border-cyan-500/30 overflow-hidden text-xs">
+            <span className="px-2 py-1 text-[10px] text-gray-400 font-bold border-r border-gray-700/60">KECEPATAN</span>
+            <button
+              onClick={() => setSimSpeed(1)}
+              className={`px-2 py-1 text-[11px] font-bold cursor-pointer transition-all ${
+                simSpeed === 1 ? 'bg-cyan-500 text-black shadow-sm' : 'text-gray-300 hover:text-white hover:bg-white/10'
+              }`}
+              title="Kecepatan Nyata (Realistis 1x)"
+            >
+              1x Real
+            </button>
+            <button
+              onClick={() => setSimSpeed(2)}
+              className={`px-2 py-1 text-[11px] font-bold cursor-pointer transition-all ${
+                simSpeed === 2 ? 'bg-cyan-500 text-black shadow-sm' : 'text-gray-300 hover:text-white hover:bg-white/10'
+              }`}
+              title="Kecepatan Cepat (2x)"
+            >
+              2x
+            </button>
+            <button
+              onClick={() => setSimSpeed(4)}
+              className={`px-2 py-1 text-[11px] font-bold cursor-pointer transition-all ${
+                simSpeed === 4 ? 'bg-cyan-500 text-black shadow-sm' : 'text-gray-300 hover:text-white hover:bg-white/10'
+              }`}
+              title="Kecepatan Ekspres (4x)"
+            >
+              4x
+            </button>
+          </div>
+
           {/* In-Flight Mayday Emergency Simulator Button */}
           <button
             onClick={() => triggerEmergency()}
@@ -590,98 +624,247 @@ export const TowerHUD: React.FC = () => {
               </button>
             </div>
 
-            {/* 2. Turnaround Service Operations */}
+            {/* 2. Turnaround Service Operations (Step-by-Step Manual Clearances) */}
             <div className="flex items-center gap-1 border-r border-gray-700/60 pr-2">
               {/* Penurunan Penumpang */}
-              <button
-                onClick={() => selectedAircraft && startDeboarding(selectedAircraft.id)}
-                disabled={!selectedAircraft || selectedAircraft.status !== 'at_gate'}
-                className="flex flex-col items-center justify-center p-1.5 rounded-lg min-w-[56px] bg-indigo-950/70 hover:bg-indigo-900 border border-indigo-500/50 text-indigo-300 disabled:opacity-20 cursor-pointer"
-                title="Mulai Penurunan Penumpang & Bagasi"
-              >
-                <Users className="w-4 h-4 mb-0.5" />
-                <span className="text-[8px] font-bold text-center leading-tight">Turunkan<br />Pax</span>
-              </button>
+              {(() => {
+                const isDeboarding = selectedAircraft?.status === 'deboarding'
+                const isDone = !!selectedAircraft?.turnaround?.deboarded
+                const canRun = !!selectedAircraft && (selectedAircraft.status === 'at_gate' || selectedAircraft.status === 'taxi_to_gate') && !isDone && !isDeboarding
+
+                return (
+                  <button
+                    onClick={() => selectedAircraft && startDeboarding(selectedAircraft.id)}
+                    disabled={!canRun}
+                    className={`flex flex-col items-center justify-center p-1.5 rounded-lg min-w-[58px] transition-all cursor-pointer ${
+                      isDeboarding
+                        ? 'bg-indigo-900/90 border-2 border-indigo-400 text-white animate-pulse shadow-[0_0_12px_rgba(99,102,241,0.5)]'
+                        : isDone
+                        ? 'bg-emerald-950/60 border border-emerald-500/50 text-emerald-300'
+                        : 'bg-indigo-950/70 hover:bg-indigo-900 border border-indigo-500/50 text-indigo-300 disabled:opacity-20'
+                    }`}
+                    title={isDone ? 'Penurunan penumpang selesai' : 'Mulai Penurunan Penumpang & Bagasi'}
+                  >
+                    <Users className={`w-4 h-4 mb-0.5 ${isDone ? 'text-emerald-400' : ''}`} />
+                    <span className="text-[8px] font-bold text-center leading-tight">
+                      {isDeboarding ? (
+                        <>Turun...<br /><strong className="text-white">{Math.round(selectedAircraft?.serviceProgress || 0)}%</strong></>
+                      ) : isDone ? (
+                        <span className="text-emerald-400">✓ Pax<br />Turun</span>
+                      ) : (
+                        <>Turunkan<br />Pax</>
+                      )}
+                    </span>
+                  </button>
+                )
+              })()}
 
               {/* Bersihkan & Cek Kabin */}
-              <button
-                onClick={() => selectedAircraft && startCabinService(selectedAircraft.id)}
-                disabled={!selectedAircraft || (selectedAircraft.status !== 'at_gate' && selectedAircraft.status !== 'deboarding')}
-                className="flex flex-col items-center justify-center p-1.5 rounded-lg min-w-[56px] bg-teal-950/70 hover:bg-teal-900 border border-teal-500/50 text-teal-300 disabled:opacity-20 cursor-pointer"
-                title="Pembersihan & Cek Kabin"
-              >
-                <Sparkles className="w-4 h-4 mb-0.5" />
-                <span className="text-[8px] font-bold text-center leading-tight">Cek & Rapih<br />Kabin</span>
-              </button>
+              {(() => {
+                const isCleaning = selectedAircraft?.status === 'cleaning'
+                const isDone = !!selectedAircraft?.turnaround?.cabinCleaned
+                const canRun = !!selectedAircraft && !!selectedAircraft?.turnaround?.deboarded && !isDone && !isCleaning
+
+                return (
+                  <button
+                    onClick={() => selectedAircraft && startCabinService(selectedAircraft.id)}
+                    disabled={!canRun}
+                    className={`flex flex-col items-center justify-center p-1.5 rounded-lg min-w-[58px] transition-all cursor-pointer ${
+                      isCleaning
+                        ? 'bg-teal-900/90 border-2 border-teal-400 text-white animate-pulse shadow-[0_0_12px_rgba(20,184,166,0.5)]'
+                        : isDone
+                        ? 'bg-emerald-950/60 border border-emerald-500/50 text-emerald-300'
+                        : 'bg-teal-950/70 hover:bg-teal-900 border border-teal-500/50 text-teal-300 disabled:opacity-20'
+                    }`}
+                    title={isDone ? 'Kabin bersih dan katering terisi' : 'Pembersihan & Cek Kabin (Setelah pax turun)'}
+                  >
+                    <Sparkles className={`w-4 h-4 mb-0.5 ${isDone ? 'text-emerald-400' : ''}`} />
+                    <span className="text-[8px] font-bold text-center leading-tight">
+                      {isCleaning ? (
+                        <>Kabin...<br /><strong className="text-white">{Math.round(selectedAircraft?.serviceProgress || 0)}%</strong></>
+                      ) : isDone ? (
+                        <span className="text-emerald-400">✓ Kabin<br />Bersih</span>
+                      ) : (
+                        <>Cek & Rapih<br />Kabin</>
+                      )}
+                    </span>
+                  </button>
+                )
+              })()}
 
               {/* Pengisian Bahan Bakar Avtur */}
-              <button
-                onClick={() => selectedAircraft && startRefueling(selectedAircraft.id)}
-                disabled={!selectedAircraft || selectedAircraft.status !== 'at_gate'}
-                className="flex flex-col items-center justify-center p-1.5 rounded-lg min-w-[56px] bg-amber-950/70 hover:bg-amber-900 border border-amber-500/50 text-amber-300 disabled:opacity-20 cursor-pointer"
-                title="Truk Tangki Mengisi Bahan Bakar Avtur"
-              >
-                <Fuel className="w-4 h-4 mb-0.5 text-amber-400" />
-                <span className="text-[8px] font-bold text-center leading-tight">Isi<br />Avtur</span>
-              </button>
+              {(() => {
+                const isRefueling = selectedAircraft?.status === 'refueling'
+                const isDone = !!selectedAircraft?.turnaround?.refueled
+                const canRun = !!selectedAircraft && !!selectedAircraft?.turnaround?.cabinCleaned && !isDone && !isRefueling
+
+                return (
+                  <button
+                    onClick={() => selectedAircraft && startRefueling(selectedAircraft.id)}
+                    disabled={!canRun}
+                    className={`flex flex-col items-center justify-center p-1.5 rounded-lg min-w-[58px] transition-all cursor-pointer ${
+                      isRefueling
+                        ? 'bg-amber-900/90 border-2 border-amber-400 text-white animate-pulse shadow-[0_0_12px_rgba(245,158,11,0.5)]'
+                        : isDone
+                        ? 'bg-emerald-950/60 border border-emerald-500/50 text-emerald-300'
+                        : 'bg-amber-950/70 hover:bg-amber-900 border border-amber-500/50 text-amber-300 disabled:opacity-20'
+                    }`}
+                    title={isDone ? 'Avtur 100% penuh' : 'Truk Tangki Mengisi Bahan Bakar Avtur'}
+                  >
+                    <Fuel className={`w-4 h-4 mb-0.5 ${isDone ? 'text-emerald-400' : 'text-amber-400'}`} />
+                    <span className="text-[8px] font-bold text-center leading-tight">
+                      {isRefueling ? (
+                        <>Isi...<br /><strong className="text-white">{selectedAircraft?.fuel}%</strong></>
+                      ) : isDone ? (
+                        <span className="text-emerald-400">✓ 100%<br />Avtur</span>
+                      ) : (
+                        <>Isi<br />Avtur</>
+                      )}
+                    </span>
+                  </button>
+                )
+              })()}
 
               {/* Pengecekan Teknis Pesawat */}
-              <button
-                onClick={() => selectedAircraft && startTechnicalCheck(selectedAircraft.id)}
-                disabled={!selectedAircraft || (selectedAircraft.status !== 'at_gate' && selectedAircraft.status !== 'in_hangar')}
-                className="flex flex-col items-center justify-center p-1.5 rounded-lg min-w-[56px] bg-orange-950/70 hover:bg-orange-900 border border-orange-500/50 text-orange-300 disabled:opacity-20 cursor-pointer"
-                title="Pemeriksaan Teknis Walkaround Teknisi"
-              >
-                <Wrench className="w-4 h-4 mb-0.5" />
-                <span className="text-[8px] font-bold text-center leading-tight">Cek<br />Teknis</span>
-              </button>
+              {(() => {
+                const isChecking = selectedAircraft?.status === 'maintenance_check'
+                const isDone = !!selectedAircraft?.turnaround?.techInspected
+                const canRun = !!selectedAircraft && !!selectedAircraft?.turnaround?.refueled && !isDone && !isChecking
+
+                return (
+                  <button
+                    onClick={() => selectedAircraft && startTechnicalCheck(selectedAircraft.id)}
+                    disabled={!canRun}
+                    className={`flex flex-col items-center justify-center p-1.5 rounded-lg min-w-[58px] transition-all cursor-pointer ${
+                      isChecking
+                        ? 'bg-orange-900/90 border-2 border-orange-400 text-white animate-pulse shadow-[0_0_12px_rgba(249,115,22,0.5)]'
+                        : isDone
+                        ? 'bg-emerald-950/60 border border-emerald-500/50 text-emerald-300'
+                        : 'bg-orange-950/70 hover:bg-orange-900 border border-orange-500/50 text-orange-300 disabled:opacity-20'
+                    }`}
+                    title={isDone ? 'Pemeriksaan teknis selesai, laik terbang' : 'Pemeriksaan Teknis Walkaround Teknisi'}
+                  >
+                    <Wrench className={`w-4 h-4 mb-0.5 ${isDone ? 'text-emerald-400' : ''}`} />
+                    <span className="text-[8px] font-bold text-center leading-tight">
+                      {isChecking ? (
+                        <>Teknis...<br /><strong className="text-white">{Math.round(selectedAircraft?.serviceProgress || 0)}%</strong></>
+                      ) : isDone ? (
+                        <span className="text-emerald-400">✓ Laik<br />Terbang</span>
+                      ) : (
+                        <>Cek<br />Teknis</>
+                      )}
+                    </span>
+                  </button>
+                )
+              })()}
 
               {/* Penaikan Penumpang (Boarding) */}
-              <button
-                onClick={() => selectedAircraft && startBoarding(selectedAircraft.id)}
-                disabled={!selectedAircraft || selectedAircraft.status !== 'at_gate'}
-                className="flex flex-col items-center justify-center p-1.5 rounded-lg min-w-[56px] bg-emerald-950/70 hover:bg-emerald-900 border border-emerald-500/50 text-emerald-300 disabled:opacity-20 cursor-pointer"
-                title="Boarding Penumpang Penerbangan Baru"
-              >
-                <Users className="w-4 h-4 mb-0.5 text-emerald-400" />
-                <span className="text-[8px] font-bold text-center leading-tight">Naikkan<br />Pax</span>
-              </button>
+              {(() => {
+                const isBoarding = selectedAircraft?.status === 'boarding'
+                const isDone = !!selectedAircraft?.turnaround?.boarded
+                const canRun = !!selectedAircraft && !!selectedAircraft?.turnaround?.techInspected && !isDone && !isBoarding
+
+                return (
+                  <button
+                    onClick={() => selectedAircraft && startBoarding(selectedAircraft.id)}
+                    disabled={!canRun}
+                    className={`flex flex-col items-center justify-center p-1.5 rounded-lg min-w-[58px] transition-all cursor-pointer ${
+                      isBoarding
+                        ? 'bg-emerald-900/90 border-2 border-emerald-400 text-white animate-pulse shadow-[0_0_12px_rgba(16,185,129,0.5)]'
+                        : isDone
+                        ? 'bg-emerald-950/60 border border-emerald-500/50 text-emerald-300'
+                        : 'bg-emerald-950/70 hover:bg-emerald-900 border border-emerald-500/50 text-emerald-300 disabled:opacity-20'
+                    }`}
+                    title={isDone ? 'Boarding 180 pax selesai' : 'Boarding Penumpang Penerbangan Baru'}
+                  >
+                    <Users className={`w-4 h-4 mb-0.5 ${isDone ? 'text-emerald-400' : 'text-emerald-400'}`} />
+                    <span className="text-[8px] font-bold text-center leading-tight">
+                      {isBoarding ? (
+                        <>Naik...<br /><strong className="text-white">{selectedAircraft?.passengers?.current || 0} pax</strong></>
+                      ) : isDone ? (
+                        <span className="text-emerald-400">✓ 180<br />Pax</span>
+                      ) : (
+                        <>Naikkan<br />Pax</>
+                      )}
+                    </span>
+                  </button>
+                )
+              })()}
             </div>
 
             {/* 3. Flight Clearances (Pushback, Taxi, Takeoff, Land) */}
             <div className="flex items-center gap-1">
               {/* Dorongan Kembali (Pushback) */}
-              <button
-                onClick={() => selectedAircraft && orderPushback(selectedAircraft.id)}
-                disabled={!selectedAircraft || selectedAircraft.status !== 'at_gate'}
-                className="flex flex-col items-center justify-center p-1.5 rounded-lg min-w-[58px] bg-blue-600/35 hover:bg-blue-600/60 border border-blue-400/60 text-blue-200 disabled:opacity-20 cursor-pointer"
-                title="Izin Dorongan Kembali (Pushback)"
-              >
-                <Truck className="w-4 h-4 mb-0.5 text-blue-300" />
-                <span className="text-[8px] font-bold text-center leading-none">Dorongan<br />kembali</span>
-              </button>
+              {(() => {
+                const isPushback = selectedAircraft?.status === 'pushback'
+                const canPushback = !!selectedAircraft && (selectedAircraft.status === 'ready_pushback' || (selectedAircraft.status === 'at_gate' && !!selectedAircraft.turnaround?.boarded)) && !isPushback
+
+                return (
+                  <button
+                    onClick={() => selectedAircraft && orderPushback(selectedAircraft.id)}
+                    disabled={!canPushback && !isPushback}
+                    className={`flex flex-col items-center justify-center p-1.5 rounded-lg min-w-[58px] transition-all cursor-pointer ${
+                      isPushback
+                        ? 'bg-blue-900/90 border-2 border-blue-400 text-white animate-pulse shadow-[0_0_12px_rgba(59,130,246,0.5)]'
+                        : canPushback
+                        ? 'bg-blue-600/50 hover:bg-blue-600/80 border border-blue-400 text-white font-bold shadow-[0_0_10px_rgba(59,130,246,0.4)]'
+                        : 'bg-blue-600/35 border border-blue-400/40 text-blue-200 disabled:opacity-20'
+                    }`}
+                    title="Izin Dorongan Kembali (Pushback)"
+                  >
+                    <Truck className="w-4 h-4 mb-0.5 text-blue-300" />
+                    <span className="text-[8px] font-bold text-center leading-none">
+                      {isPushback ? 'Mendorong...' : <>Dorongan<br />kembali</>}
+                    </span>
+                  </button>
+                )
+              })()}
 
               {/* Taksi ke Runway 09 */}
-              <button
-                onClick={() => selectedAircraft && orderTaxi(selectedAircraft.id)}
-                disabled={!selectedAircraft || (selectedAircraft.status !== 'holding' && selectedAircraft.status !== 'at_gate' && selectedAircraft.status !== 'in_hangar')}
-                className="flex flex-col items-center justify-center p-1.5 rounded-lg min-w-[56px] bg-amber-600/35 hover:bg-amber-600/60 border border-amber-400/60 text-amber-200 disabled:opacity-20 cursor-pointer"
-                title="Taksi ke Titik Tunggu Runway 09"
-              >
-                <Plane className="w-4 h-4 mb-0.5 text-amber-300 rotate-45" />
-                <span className="text-[8px] font-bold">Taksi</span>
-              </button>
+              {(() => {
+                const isTaxiing = selectedAircraft?.status === 'taxi_to_runway'
+                const canTaxi = !!selectedAircraft && selectedAircraft.status === 'holding' && !isTaxiing
+
+                return (
+                  <button
+                    onClick={() => selectedAircraft && orderTaxi(selectedAircraft.id)}
+                    disabled={!canTaxi && !isTaxiing}
+                    className={`flex flex-col items-center justify-center p-1.5 rounded-lg min-w-[56px] transition-all cursor-pointer ${
+                      isTaxiing
+                        ? 'bg-amber-900/90 border-2 border-amber-400 text-white animate-pulse'
+                        : canTaxi
+                        ? 'bg-amber-600/50 hover:bg-amber-600/80 border border-amber-400 text-white font-bold shadow-[0_0_10px_rgba(245,158,11,0.4)]'
+                        : 'bg-amber-600/35 border border-amber-400/40 text-amber-200 disabled:opacity-20'
+                    }`}
+                    title="Taksi ke Titik Tunggu Runway 09"
+                  >
+                    <Plane className="w-4 h-4 mb-0.5 text-amber-300 rotate-45" />
+                    <span className="text-[8px] font-bold">{isTaxiing ? 'Taksi...' : 'Taksi'}</span>
+                  </button>
+                )
+              })()}
 
               {/* Izin Lepas Landas (Takeoff) */}
-              <button
-                onClick={() => selectedAircraft && orderTakeoff(selectedAircraft.id)}
-                disabled={!selectedAircraft || (selectedAircraft.status !== 'holding' && selectedAircraft.status !== 'taxi_to_runway')}
-                className="flex flex-col items-center justify-center p-1.5 rounded-lg min-w-[58px] bg-emerald-600/35 hover:bg-emerald-600/60 border border-emerald-400/60 text-emerald-200 disabled:opacity-20 cursor-pointer"
-                title="Izin Lepas Landas Runway 09"
-              >
-                <Send className="w-4 h-4 mb-0.5 text-emerald-300 -rotate-45" />
-                <span className="text-[8px] font-bold text-center leading-none">Lepas<br />landas</span>
-              </button>
+              {(() => {
+                const isTakeoff = selectedAircraft?.status === 'takeoff'
+                const canTakeoff = !!selectedAircraft && selectedAircraft.status === 'holding' && (selectedAircraft.pos3d?.x ?? 0) <= -550
+
+                return (
+                  <button
+                    onClick={() => selectedAircraft && orderTakeoff(selectedAircraft.id)}
+                    disabled={!canTakeoff && !isTakeoff}
+                    className={`flex flex-col items-center justify-center p-1.5 rounded-lg min-w-[58px] transition-all cursor-pointer ${
+                      canTakeoff
+                        ? 'bg-emerald-600/70 hover:bg-emerald-600 border-2 border-emerald-400 text-white font-bold animate-pulse shadow-[0_0_15px_rgba(16,185,129,0.6)]'
+                        : 'bg-emerald-600/35 border border-emerald-400/40 text-emerald-200 disabled:opacity-20'
+                    }`}
+                    title="Izin Lepas Landas Runway 09"
+                  >
+                    <Send className="w-4 h-4 mb-0.5 text-emerald-300 -rotate-45" />
+                    <span className="text-[8px] font-bold text-center leading-none">Lepas<br />landas</span>
+                  </button>
+                )
+              })()}
 
               {/* Izin Mendarat (Cleared to Land) */}
               <button

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Aircraft, CommLogItem, GameState, RadioChannel, ViewMode, Waypoint, WeatherCondition } from '../types/atc'
+import type { Aircraft, AircraftStatus, CommLogItem, GameState, RadioChannel, ViewMode, Waypoint, WeatherCondition } from '../types/atc'
 import { generateRandomAircraft } from '../utils/aircraftSpawner'
 import { radioSound } from '../utils/audioEffects'
 
@@ -34,6 +34,13 @@ export const getInitialAircrafts = (
     serviceProgress: 0,
     passengers: { current: 175, max: 180 },
     technicalHealth: 98,
+    turnaround: {
+      deboarded: false,
+      cabinCleaned: false,
+      refueled: false,
+      techInspected: false,
+      boarded: false,
+    },
     history: [],
     conflictWith: [],
   },
@@ -60,6 +67,13 @@ export const getInitialAircrafts = (
     serviceProgress: 100,
     passengers: { current: 180, max: 180 },
     technicalHealth: 100,
+    turnaround: {
+      deboarded: true,
+      cabinCleaned: true,
+      refueled: true,
+      techInspected: true,
+      boarded: true,
+    },
     history: [],
     conflictWith: [],
   },
@@ -85,6 +99,13 @@ export const getInitialAircrafts = (
     serviceProgress: 0,
     passengers: { current: 160, max: 160 },
     technicalHealth: 95,
+    turnaround: {
+      deboarded: false,
+      cabinCleaned: false,
+      refueled: false,
+      techInspected: false,
+      boarded: false,
+    },
     history: [],
     conflictWith: [],
   },
@@ -110,6 +131,8 @@ export const useGameStore = create<GameState>((set) => ({
   radarCenter: DEFAULT_CENTER,
   radarRadius: DEFAULT_RADIUS,
   isPaused: false,
+  simSpeed: 1,
+  setSimSpeed: (speed: number) => set({ simSpeed: speed }),
   selectedAircraftId: 'GIA123',
   micActive: false,
 
@@ -233,7 +256,7 @@ export const useGameStore = create<GameState>((set) => ({
 
     set((state) => ({
       aircrafts: state.aircrafts.map((ac) =>
-        ac.id === id ? { ...ac, status: 'deboarding', serviceProgress: 10 } : ac
+        ac.id === id ? { ...ac, status: 'deboarding', serviceProgress: 0 } : ac
       ),
       commsLog: [
         ...state.commsLog,
@@ -246,7 +269,7 @@ export const useGameStore = create<GameState>((set) => ({
           type: 'info' as const,
         },
       ].slice(-50),
-      tutorialText: `Penumpang dan bagasi ${id} sedang diturunkan. Setelah selesai, klik [🧹 Bersihkan Kabin]!`,
+      tutorialText: `Penumpang dan bagasi ${id} sedang diturunkan. Tunggu hingga selesai, lalu klik [🧹 Bersihkan Kabin]!`,
     }))
   },
 
@@ -256,7 +279,7 @@ export const useGameStore = create<GameState>((set) => ({
 
     set((state) => ({
       aircrafts: state.aircrafts.map((ac) =>
-        ac.id === id ? { ...ac, status: 'cleaning', serviceProgress: 10 } : ac
+        ac.id === id ? { ...ac, status: 'cleaning', serviceProgress: 0 } : ac
       ),
       commsLog: [
         ...state.commsLog,
@@ -269,7 +292,7 @@ export const useGameStore = create<GameState>((set) => ({
           type: 'info' as const,
         },
       ].slice(-50),
-      tutorialText: `Kabin ${id} sedang dibersihkan dan disiapkan. Langkah berikutnya: [⛽ Isi Avtur]!`,
+      tutorialText: `Kabin ${id} sedang dibersihkan. Tunggu hingga selesai, lalu klik [⛽ Isi Avtur]!`,
     }))
   },
 
@@ -279,7 +302,7 @@ export const useGameStore = create<GameState>((set) => ({
 
     set((state) => ({
       aircrafts: state.aircrafts.map((ac) =>
-        ac.id === id ? { ...ac, status: 'refueling', serviceProgress: 10 } : ac
+        ac.id === id ? { ...ac, status: 'refueling', serviceProgress: 0 } : ac
       ),
       commsLog: [
         ...state.commsLog,
@@ -292,7 +315,7 @@ export const useGameStore = create<GameState>((set) => ({
           type: 'info' as const,
         },
       ].slice(-50),
-      tutorialText: `Truk bahan bakar sedang mengisi avtur ${id}. Selanjutnya: [🔧 Cek Teknis & Hangar]!`,
+      tutorialText: `Truk bahan bakar sedang mengisi avtur ${id}. Tunggu hingga 100%, lalu klik [🔧 Cek Teknis]!`,
     }))
   },
 
@@ -302,7 +325,7 @@ export const useGameStore = create<GameState>((set) => ({
 
     set((state) => ({
       aircrafts: state.aircrafts.map((ac) =>
-        ac.id === id ? { ...ac, status: 'maintenance_check', serviceProgress: 10 } : ac
+        ac.id === id ? { ...ac, status: 'maintenance_check', serviceProgress: 0 } : ac
       ),
       commsLog: [
         ...state.commsLog,
@@ -315,7 +338,7 @@ export const useGameStore = create<GameState>((set) => ({
           type: 'info' as const,
         },
       ].slice(-50),
-      tutorialText: `Pengecekan teknis ${id} sedang berlangsung. Jika lolos, klik [🚶 Naikkan Penumpang]!`,
+      tutorialText: `Pengecekan teknis ${id} sedang berlangsung. Setelah lolos, klik [🚶 Naikkan Penumpang]!`,
     }))
   },
 
@@ -325,7 +348,7 @@ export const useGameStore = create<GameState>((set) => ({
 
     set((state) => ({
       aircrafts: state.aircrafts.map((ac) =>
-        ac.id === id ? { ...ac, status: 'boarding', serviceProgress: 10 } : ac
+        ac.id === id ? { ...ac, status: 'boarding', serviceProgress: 0 } : ac
       ),
       commsLog: [
         ...state.commsLog,
@@ -338,7 +361,7 @@ export const useGameStore = create<GameState>((set) => ({
           type: 'info' as const,
         },
       ].slice(-50),
-      tutorialText: `Boarding ${id} selesai! Pesawat siap berangkat. Beri izin [🚜 Dorongan Kembali (Pushback)]!`,
+      tutorialText: `Boarding ${id} sedang berlangsung. Setelah 180 pax naik, berikan izin [🚜 Dorongan Kembali (Pushback)]!`,
     }))
   },
 
@@ -645,11 +668,11 @@ export const useGameStore = create<GameState>((set) => ({
         'Hangar': { x: 120, z: -25 },
       }
 
-      const updatedAircrafts = state.aircrafts
-        .map((ac) => {
+      const updatedAircrafts: Aircraft[] = state.aircrafts
+        .map((ac): Aircraft => {
           let pos = ac.pos3d || { x: 0, y: 0.1, z: 0 }
           let heading = ac.heading
-          let status = ac.status
+          let status: AircraftStatus = ac.status
           let altitude = ac.altitude
           let progress = ac.phaseProgress || 0
           let serviceProg = ac.serviceProgress || 0
@@ -658,66 +681,159 @@ export const useGameStore = create<GameState>((set) => ({
 
           // Turnaround Stage: DEBOARDING
           if (status === 'deboarding') {
+            const stepRate = 0.08 * (state.simSpeed || 1)
             if (serviceProg < 100) {
-              serviceProg += 0.5
+              serviceProg = Math.min(100, serviceProg + stepRate)
               passengers = {
                 ...passengers,
                 current: Math.max(0, Math.round(passengers.max * (1 - serviceProg / 100))),
               }
+              return { ...ac, serviceProgress: serviceProg, passengers }
             } else {
-              status = 'cleaning'
-              serviceProg = 0
+              // FINISHED: Deboarding complete, STOP and wait for ATC/Ground command
+              status = 'at_gate'
+              serviceProg = 100
+              passengers = { ...passengers, current: 0 }
+              const turnaround = {
+                ...(ac.turnaround || {}),
+                deboarded: true,
+              }
+              radioSound.playRogerBeep()
+              pilotReadback(`${ac.id}, penurunan seluruh penumpang dan bagasi selesai. Kabin kosong. Menunggu izin pembersihan kabin.`)
+              const logMsg: CommLogItem = {
+                id: `deb-done-${Date.now()}`,
+                timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
+                sender: 'GROUND_CREW' as const,
+                callsign: ac.id,
+                message: `Deboarding completed for ${ac.id}. 0 pax on board. Ready for cabin cleaning.`,
+                type: 'info' as const,
+              }
+              updatedComms = [...updatedComms, logMsg]
+              return { ...ac, status, serviceProgress: 100, passengers, turnaround }
             }
-            return { ...ac, status, serviceProgress: serviceProg, passengers }
           }
 
           // Turnaround Stage: CLEANING
           if (status === 'cleaning') {
+            const stepRate = 0.09 * (state.simSpeed || 1)
             if (serviceProg < 100) {
-              serviceProg += 0.6
+              serviceProg = Math.min(100, serviceProg + stepRate)
+              return { ...ac, serviceProgress: serviceProg }
             } else {
-              status = 'refueling'
-              serviceProg = 0
+              // FINISHED: Cleaning complete, STOP and wait for ATC/Ground command
+              status = 'at_gate'
+              serviceProg = 100
+              const turnaround = {
+                ...(ac.turnaround || {}),
+                cabinCleaned: true,
+              }
+              radioSound.playRogerBeep()
+              pilotReadback(`${ac.id}, kru kabin selesai membersihkan dan merapikan interior. Katering terisi. Menunggu izin pengisian avtur.`)
+              const logMsg: CommLogItem = {
+                id: `clean-done-${Date.now()}`,
+                timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
+                sender: 'GROUND_CREW' as const,
+                callsign: ac.id,
+                message: `Cabin service completed for ${ac.id}. Cabin sanitized & catering restocked. Ready for refueling.`,
+                type: 'info' as const,
+              }
+              updatedComms = [...updatedComms, logMsg]
+              return { ...ac, status, serviceProgress: 100, turnaround }
             }
-            return { ...ac, status, serviceProgress: serviceProg }
           }
 
           // Turnaround Stage: REFUELING
           if (status === 'refueling') {
+            const stepRate = 0.07 * (state.simSpeed || 1)
             if (serviceProg < 100) {
-              serviceProg += 0.5
-              fuel = Math.min(100, Math.round(fuel + 0.6))
+              serviceProg = Math.min(100, serviceProg + stepRate)
+              fuel = Math.min(100, Math.round(30 + (70 * serviceProg) / 100))
+              return { ...ac, serviceProgress: serviceProg, fuel }
             } else {
-              status = 'maintenance_check'
-              serviceProg = 0
+              // FINISHED: Refueling complete, STOP and wait for ATC/Ground command
+              status = 'at_gate'
+              serviceProg = 100
+              fuel = 100
+              const turnaround = {
+                ...(ac.turnaround || {}),
+                refueled: true,
+              }
+              radioSound.playRogerBeep()
+              pilotReadback(`${ac.id}, pengisian avtur selesai seratus persen. Selang truk tangki telah dilepas. Menunggu izin pemeriksaan teknis.`)
+              const logMsg: CommLogItem = {
+                id: `fuel-done-${Date.now()}`,
+                timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
+                sender: 'GROUND_CREW' as const,
+                callsign: ac.id,
+                message: `Refueling completed for ${ac.id}. Fuel at 100% capacity. Hose disconnected. Ready for technical check.`,
+                type: 'info' as const,
+              }
+              updatedComms = [...updatedComms, logMsg]
+              return { ...ac, status, serviceProgress: 100, fuel: 100, turnaround }
             }
-            return { ...ac, status, serviceProgress: serviceProg, fuel }
           }
 
           // Turnaround Stage: TECHNICAL CHECK
           if (status === 'maintenance_check') {
+            const stepRate = 0.08 * (state.simSpeed || 1)
             if (serviceProg < 100) {
-              serviceProg += 0.6
+              serviceProg = Math.min(100, serviceProg + stepRate)
+              return { ...ac, serviceProgress: serviceProg, technicalHealth: 100 }
             } else {
-              status = 'boarding'
-              serviceProg = 0
+              // FINISHED: Tech check complete, STOP and wait for ATC/Ground command
+              status = 'at_gate'
+              serviceProg = 100
+              const turnaround = {
+                ...(ac.turnaround || {}),
+                techInspected: true,
+              }
+              radioSound.playRogerBeep()
+              pilotReadback(`${ac.id}, walkaround inspection teknisi selesai. Roda, hidrolik, dan mesin laik terbang. Menunggu izin boarding penumpang.`)
+              const logMsg: CommLogItem = {
+                id: `tech-done-${Date.now()}`,
+                timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
+                sender: 'GROUND_CREW' as const,
+                callsign: ac.id,
+                message: `Pre-flight walkaround completed on ${ac.id}. Technical health 100% (Airworthy). Ready for boarding.`,
+                type: 'info' as const,
+              }
+              updatedComms = [...updatedComms, logMsg]
+              return { ...ac, status, serviceProgress: 100, technicalHealth: 100, turnaround }
             }
-            return { ...ac, status, serviceProgress: serviceProg, technicalHealth: 100 }
           }
 
           // Turnaround Stage: BOARDING
           if (status === 'boarding') {
+            const stepRate = 0.08 * (state.simSpeed || 1)
             if (serviceProg < 100) {
-              serviceProg += 0.5
+              serviceProg = Math.min(100, serviceProg + stepRate)
               passengers = {
                 ...passengers,
                 current: Math.min(passengers.max, Math.round((passengers.max * serviceProg) / 100)),
               }
+              return { ...ac, serviceProgress: serviceProg, passengers }
             } else {
-              status = 'at_gate'
+              // FINISHED: Boarding complete! Aircraft is ready for pushback, WAITING FOR ATC CLEARANCE
+              status = 'ready_pushback'
               serviceProg = 100
+              passengers = { ...passengers, current: passengers.max }
+              const turnaround = {
+                ...(ac.turnaround || {}),
+                boarded: true,
+              }
+              radioSound.playRogerBeep()
+              pilotReadback(`${ac.id}, boarding selesai. Seratus delapan puluh penumpang di dalam kabin, pintu ditutup. Meminta izin dorongan kembali (Pushback).`)
+              const logMsg: CommLogItem = {
+                id: `board-done-${Date.now()}`,
+                timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
+                sender: 'PILOT' as const,
+                callsign: ac.id,
+                message: `${ac.id}: Boarding completed (180/180 pax). Cabin secured. Requesting pushback clearance.`,
+                type: 'info' as const,
+              }
+              updatedComms = [...updatedComms, logMsg]
+              return { ...ac, status: 'ready_pushback', serviceProgress: 100, passengers, turnaround }
             }
-            return { ...ac, status, serviceProgress: serviceProg, passengers }
           }
 
           // Phase: TAXI TO GATE OR HANGAR
