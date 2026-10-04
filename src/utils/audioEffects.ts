@@ -92,7 +92,7 @@ class RadioSoundFX {
       // Master carrier gain with quick fade-in
       const masterGain = ctx.createGain()
       masterGain.gain.setValueAtTime(0.001, ctx.currentTime)
-      masterGain.gain.exponentialRampToValueAtTime(isCockpit ? 0.045 : 0.025, ctx.currentTime + 0.04)
+      masterGain.gain.exponentialRampToValueAtTime(isCockpit ? 0.03 : 0.018, ctx.currentTime + 0.04)
 
       // 1. Airband VHF White/Pink Noise (Bandpass filtered 350Hz - 2900Hz)
       const bufferSize = ctx.sampleRate * 2
@@ -454,8 +454,8 @@ class RadioSoundFX {
     // Prevent duplicate identical transmissions in queue
     if (this.speechQueue.some((item) => item.role === role && item.text === trimmed)) return
 
-    // Cap queue to max 6 transmissions to keep radio timely
-    if (this.speechQueue.length >= 6) {
+    // Cap queue to max 2 transmissions to prevent audio clutter and never-ending radio backlog
+    if (this.speechQueue.length >= 2) {
       this.speechQueue.shift()
     }
 
@@ -471,6 +471,21 @@ class RadioSoundFX {
     if (!this.isSpeaking) {
       this.processNextTransmission()
     }
+  }
+
+  /**
+   * Clear pending radio transmissions
+   */
+  clearSpeechQueue() {
+    this.speechQueue = []
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel()
+    }
+    this.stopRadioCarrier()
+    this.isSpeaking = false
+    this.currentSpeaker = null
+    this.currentTransmittingText = ''
+    this.notifySpeakerSubscribers()
   }
 
   /**
