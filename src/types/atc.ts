@@ -56,6 +56,7 @@ export interface GameState {
   gameOverReason?: string;
   collisionPoint: { x: number; y: number } | null;
   radarCenter: { x: number; y: number };
+  radarRadius: number;
   isPaused: boolean;
   selectedAircraftId: string | null;
   commsLog: CommLogItem[];
@@ -69,6 +70,7 @@ export interface GameState {
   // Additional control & Phase 4 actions
   spawnAircraft: () => void;
   setRadarCenter: (center: { x: number; y: number }) => void;
+  setRadarDimensions: (center: { x: number; y: number }, radius: number) => void;
   selectAircraft: (id: string | null) => void;
   setAircraftHeading: (id: string, heading: number) => void;
   setAircraftSpeed: (id: string, speed: number) => void;

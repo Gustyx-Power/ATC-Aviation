@@ -4,18 +4,22 @@ import { generateRandomAircraft } from '../utils/aircraftSpawner'
 import { radioSound } from '../utils/audioEffects'
 
 const DEFAULT_CENTER = { x: 450, y: 350 }
+const DEFAULT_RADIUS = 280
 
-const INITIAL_AIRCRAFTS: Aircraft[] = [
+export const getInitialAircrafts = (
+  center = DEFAULT_CENTER,
+  radius = DEFAULT_RADIUS
+): Aircraft[] => [
   {
     id: 'GIA123',
     airline: 'Garuda Indonesia',
     aircraftType: 'B738',
     squawk: '4201',
-    x: 160,
-    y: 240,
-    speed: 1.3,
-    heading: 95,
-    targetHeading: 95,
+    x: center.x - radius * 0.65,
+    y: center.y - radius * 0.20,
+    speed: 1.30,
+    heading: 105,
+    targetHeading: 105,
     altitude: 5000,
     targetAltitude: 5000,
     fuel: 98,
@@ -23,9 +27,8 @@ const INITIAL_AIRCRAFTS: Aircraft[] = [
     status: 'cruising',
     conflictWith: [],
     history: [
-      { x: 130, y: 237 },
-      { x: 145, y: 238 },
-      { x: 160, y: 240 },
+      { x: center.x - radius * 0.70, y: center.y - radius * 0.22 },
+      { x: center.x - radius * 0.65, y: center.y - radius * 0.20 },
     ],
   },
   {
@@ -33,9 +36,9 @@ const INITIAL_AIRCRAFTS: Aircraft[] = [
     airline: 'Lion Air',
     aircraftType: 'A320',
     squawk: '5124',
-    x: 640,
-    y: 480,
-    speed: 1.2,
+    x: center.x + radius * 0.55,
+    y: center.y + radius * 0.35,
+    speed: 1.25,
     heading: 315,
     targetHeading: 315,
     altitude: 7000,
@@ -45,19 +48,17 @@ const INITIAL_AIRCRAFTS: Aircraft[] = [
     status: 'cruising',
     conflictWith: [],
     history: [
-      { x: 660, y: 500 },
-      { x: 650, y: 490 },
-      { x: 640, y: 480 },
+      { x: center.x + radius * 0.60, y: center.y + radius * 0.40 },
+      { x: center.x + radius * 0.55, y: center.y + radius * 0.35 },
     ],
   },
 ]
-
 
 let frameCounter = 0
 let lastConflictSoundTime = 0
 
 export const useGameStore = create<GameState>((set) => ({
-  aircrafts: INITIAL_AIRCRAFTS,
+  aircrafts: getInitialAircrafts(DEFAULT_CENTER, DEFAULT_RADIUS),
   score: 0,
   landedCount: 0,
   survivalTime: 0,
@@ -65,6 +66,7 @@ export const useGameStore = create<GameState>((set) => ({
   gameOverReason: undefined,
   collisionPoint: null,
   radarCenter: DEFAULT_CENTER,
+  radarRadius: DEFAULT_RADIUS,
   isPaused: false,
   selectedAircraftId: 'GIA123',
   micActive: false,
@@ -86,14 +88,50 @@ export const useGameStore = create<GameState>((set) => ({
     },
   ],
 
+  setRadarDimensions: (center: { x: number; y: number }, radius: number) =>
+    set((state) => {
+      const prevCenter = state.radarCenter
+      const dx = center.x - prevCenter.x
+      const dy = center.y - prevCenter.y
+
+      if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
+        const adjustedAircrafts = state.aircrafts.map((ac) => ({
+          ...ac,
+          x: ac.x + dx,
+          y: ac.y + dy,
+          history: (ac.history || []).map((h) => ({ x: h.x + dx, y: h.y + dy })),
+          waypoints: ac.waypoints.map((wp) => ({ x: wp.x + dx, y: wp.y + dy })),
+        }))
+        return { radarCenter: center, radarRadius: radius, aircrafts: adjustedAircrafts }
+      }
+      return { radarCenter: center, radarRadius: radius }
+    }),
+
   setRadarCenter: (center: { x: number; y: number }) =>
-    set(() => ({ radarCenter: center })),
+    set((state) => {
+      const prevCenter = state.radarCenter
+      const dx = center.x - prevCenter.x
+      const dy = center.y - prevCenter.y
+
+      if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
+        const adjustedAircrafts = state.aircrafts.map((ac) => ({
+          ...ac,
+          x: ac.x + dx,
+          y: ac.y + dy,
+          history: (ac.history || []).map((h) => ({ x: h.x + dx, y: h.y + dy })),
+          waypoints: ac.waypoints.map((wp) => ({ x: wp.x + dx, y: wp.y + dy })),
+        }))
+        return { radarCenter: center, aircrafts: adjustedAircrafts }
+      }
+      return { radarCenter: center }
+    }),
 
   spawnAircraft: () =>
     set((state) => {
       const center = state.radarCenter || DEFAULT_CENTER
+      const radius = state.radarRadius || DEFAULT_RADIUS
       const existingIds = state.aircrafts.map((a) => a.id)
-      const newAircraft = generateRandomAircraft(center, existingIds)
+      const newAircraft = generateRandomAircraft(center, radius, existingIds)
 
       const spawnMsg: CommLogItem = {
         id: `spawn-${Date.now()}`,
@@ -119,6 +157,7 @@ export const useGameStore = create<GameState>((set) => ({
 
       frameCounter++
       const center = state.radarCenter || DEFAULT_CENTER
+      const radarRadius = state.radarRadius || DEFAULT_RADIUS
       const rwyThresholdX = center.x - 70 // West threshold for Runway 09
       const rwyThresholdY = center.y
 
@@ -184,21 +223,28 @@ export const useGameStore = create<GameState>((set) => ({
           }
         }
 
-        // Forward motion along heading
+        // Forward motion along heading (scaled for smooth, realistic radar pacing)
+        const motionSpeed = currentSpeed * 0.50
         const rad = (currentHeading * Math.PI) / 180
-        const dx = Math.sin(rad) * currentSpeed
-        const dy = -Math.cos(rad) * currentSpeed
+        const dx = Math.sin(rad) * motionSpeed
+        const dy = -Math.cos(rad) * motionSpeed
 
         let newX = ac.x + dx
         let newY = ac.y + dy
 
         // In cruising, gently wrap around radar scope boundary
         if (currentStatus !== 'landing') {
-          const radarBounds = 1000
-          if (newX > radarBounds + 100) newX = -50
-          if (newX < -50) newX = radarBounds + 50
-          if (newY > radarBounds + 100) newY = -50
-          if (newY < -50) newY = radarBounds + 50
+          const distFromCenter = Math.hypot(newX - center.x, newY - center.y)
+          if (distFromCenter > radarRadius * 0.98) {
+            const angle = Math.atan2(newY - center.y, newX - center.x)
+            const enterRadius = radarRadius * 0.92
+            newX = center.x - Math.cos(angle) * enterRadius
+            newY = center.y - Math.sin(angle) * enterRadius
+            // Re-point heading towards center airport
+            const inboundAngle = Math.atan2(center.x - newX, -(center.y - newY))
+            currentHeading = ((inboundAngle * 180) / Math.PI + 360) % 360
+            waypoints = []
+          }
         }
 
         // History trail for radar phosphor persistence
@@ -341,7 +387,7 @@ export const useGameStore = create<GameState>((set) => ({
         finalAircrafts.length < 2
       ) {
         const existingIds = finalAircrafts.map((a) => a.id)
-        const incomingAc = generateRandomAircraft(center, existingIds)
+        const incomingAc = generateRandomAircraft(center, radarRadius, existingIds)
         finalAircrafts = [...finalAircrafts, incomingAc]
       }
 
@@ -410,8 +456,8 @@ export const useGameStore = create<GameState>((set) => ({
 
   resetGame: () => {
     frameCounter = 0
-    set(() => ({
-      aircrafts: INITIAL_AIRCRAFTS,
+    set((state) => ({
+      aircrafts: getInitialAircrafts(state.radarCenter, state.radarRadius),
       score: 0,
       landedCount: 0,
       survivalTime: 0,

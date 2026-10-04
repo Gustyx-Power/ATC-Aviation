@@ -7,15 +7,13 @@ export const RadarCanvas: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
 
-  const aircrafts = useGameStore((state) => state.aircrafts)
   const selectedAircraftId = useGameStore((state) => state.selectedAircraftId)
   const selectAircraft = useGameStore((state) => state.selectAircraft)
   const setWaypoints = useGameStore((state) => state.setWaypoints)
   const addCommLog = useGameStore((state) => state.addCommLog)
-  const setRadarCenter = useGameStore((state) => state.setRadarCenter)
+  const setRadarDimensions = useGameStore((state) => state.setRadarDimensions)
   const gameOver = useGameStore((state) => state.gameOver)
   const gameOverReason = useGameStore((state) => state.gameOverReason)
-  const collisionPoint = useGameStore((state) => state.collisionPoint)
   const resetGame = useGameStore((state) => state.resetGame)
   const score = useGameStore((state) => state.score)
   const landedCount = useGameStore((state) => state.landedCount)
@@ -63,6 +61,7 @@ export const RadarCanvas: React.FC = () => {
     let animationFrameId: number
 
     const render = () => {
+      const { aircrafts, selectedAircraftId, gameOver, collisionPoint } = useGameStore.getState()
       const dpr = window.devicePixelRatio || 1
       const width = canvas.clientWidth || canvas.width / dpr
       const height = canvas.clientHeight || canvas.height / dpr
@@ -624,7 +623,7 @@ export const RadarCanvas: React.FC = () => {
     return () => {
       cancelAnimationFrame(animationFrameId)
     }
-  }, [aircrafts, selectedAircraftId, gameOver, collisionPoint])
+  }, [])
 
   // Resize handler: updates canvas buffer & syncs radar center to store
   useEffect(() => {
@@ -640,23 +639,38 @@ export const RadarCanvas: React.FC = () => {
       canvas.style.width = `${rect.width}px`
       canvas.style.height = `${rect.height}px`
 
-      setRadarCenter({ x: rect.width / 2, y: rect.height / 2 })
+      const centerX = rect.width / 2
+      const centerY = rect.height / 2
+      const radius = Math.min(centerX, centerY) * 0.88
+
+      setRadarDimensions({ x: centerX, y: centerY }, radius)
     }
 
     handleResize()
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
-  }, [setRadarCenter])
+  }, [setRadarDimensions])
 
   // Draw Path Pointer Handlers
   const handlePointerDown = (clientX: number, clientY: number) => {
+    const { gameOver, aircrafts } = useGameStore.getState()
     if (gameOver) return
     const coords = getCanvasCoords(clientX, clientY)
     if (!coords) return
 
     const clickedAircraft = aircrafts.find((ac) => {
       const dist = Math.hypot(ac.x - coords.x, ac.y - coords.y)
-      return dist <= 32
+      if (dist <= 36) return true
+
+      // Also check tactical data block bounds: [tagX, tagY - 36] to [tagX + 82, tagY]
+      const tagX = ac.x + 24
+      const tagY = ac.y - 24
+      return (
+        coords.x >= tagX &&
+        coords.x <= tagX + 82 &&
+        coords.y >= tagY - 36 &&
+        coords.y <= tagY
+      )
     })
 
     if (clickedAircraft) {
@@ -674,7 +688,7 @@ export const RadarCanvas: React.FC = () => {
   }
 
   const handlePointerMove = (clientX: number, clientY: number) => {
-    if (gameOver) return
+    if (useGameStore.getState().gameOver) return
     const coords = getCanvasCoords(clientX, clientY)
     if (!coords) return
 

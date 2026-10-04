@@ -11,6 +11,7 @@ const AIRLINES = [
 
 export function generateRandomAircraft(
   radarCenter: { x: number; y: number },
+  radarRadius: number = 280,
   existingIds: string[] = []
 ): Aircraft {
   // Pick random airline
@@ -24,21 +25,21 @@ export function generateRandomAircraft(
     id = `${airlineInfo.prefix}${flightNum}`
   }
 
-  // Spawn on circular perimeter around radar scope
-  const spawnRadius = 360 + Math.random() * 40
+  // Spawn on perimeter ring inside radar scope (0.94 of radarRadius so fully visible)
+  const spawnRadius = radarRadius * 0.94
   const spawnAngle = Math.random() * Math.PI * 2 // 0 to 2PI
 
   const x = radarCenter.x + Math.cos(spawnAngle) * spawnRadius
   const y = radarCenter.y + Math.sin(spawnAngle) * spawnRadius
 
-  // Heading pointed inward towards radar center with +/- 30 deg variation
+  // Heading pointed inward towards radar center with +/- 35 deg variation
   const angleToCenter = Math.atan2(radarCenter.x - x, -(radarCenter.y - y))
   let heading = ((angleToCenter * 180) / Math.PI + 360) % 360
-  heading = (heading + (Math.random() * 60 - 30) + 360) % 360
+  heading = (heading + (Math.random() * 70 - 35) + 360) % 360
 
   const altitude = Math.floor(40 + Math.random() * 35) * 100 // 4000 - 7500 ft
-  const speed = 1.25 + Math.random() * 0.45 // 1.25 - 1.70 px/frame (~125-170kt)
-  const fuel = 65 + Math.floor(Math.random() * 30) // 65% - 95%
+  const speed = 1.20 + Math.random() * 0.40 // 1.20 - 1.60 (120-160kt)
+  const fuel = 70 + Math.floor(Math.random() * 25) // 70% - 95%
   const squawk = String(Math.floor(1000 + Math.random() * 6000))
 
   return {
