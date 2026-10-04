@@ -9,23 +9,27 @@ import {
   Truck,
   Send,
   Octagon,
-  Radio,
-  AlertTriangle,
   Camera,
   Search,
   Eye,
-  Radar,
   Play,
   Pause,
   Sun,
+  CloudRain,
+  CloudFog,
   Volume2,
   Mic,
-  Activity,
   CheckCircle,
+  Users,
+  Fuel,
+  Wrench,
+  Sparkles,
+  ShieldAlert,
 } from 'lucide-react'
 import { useGameStore } from '../store/useGameStore'
 import { useVoiceCommand } from '../hooks/useVoiceCommand'
 import { radioSound } from '../utils/audioEffects'
+import type { WeatherCondition } from '../types/atc'
 
 export const TowerHUD: React.FC = () => {
   const aircrafts = useGameStore((state) => state.aircrafts)
@@ -37,8 +41,6 @@ export const TowerHUD: React.FC = () => {
   const landedCount = useGameStore((state) => state.landedCount)
   const viewMode = useGameStore((state) => state.viewMode)
   const setViewMode = useGameStore((state) => state.setViewMode)
-  const activeChannel = useGameStore((state) => state.activeChannel)
-  const setActiveChannel = useGameStore((state) => state.setActiveChannel)
   const tutorialText = useGameStore((state) => state.tutorialText)
   const tutorialActive = useGameStore((state) => state.tutorialActive)
   const dismissTutorial = useGameStore((state) => state.dismissTutorial)
@@ -46,14 +48,22 @@ export const TowerHUD: React.FC = () => {
   const togglePause = useGameStore((state) => state.togglePause)
   const spawnAircraft = useGameStore((state) => state.spawnAircraft)
   const weather = useGameStore((state) => state.weather)
+  const setWeatherCondition = useGameStore((state) => state.setWeatherCondition)
 
-  // Clearances
+  // Ground Turnaround & Clearance Actions
+  const assignDestination = useGameStore((state) => state.assignDestination)
+  const startDeboarding = useGameStore((state) => state.startDeboarding)
+  const startCabinService = useGameStore((state) => state.startCabinService)
+  const startRefueling = useGameStore((state) => state.startRefueling)
+  const startTechnicalCheck = useGameStore((state) => state.startTechnicalCheck)
+  const startBoarding = useGameStore((state) => state.startBoarding)
   const orderPushback = useGameStore((state) => state.orderPushback)
   const orderTaxi = useGameStore((state) => state.orderTaxi)
   const orderTakeoff = useGameStore((state) => state.orderTakeoff)
   const orderHold = useGameStore((state) => state.orderHold)
   const orderClearedToLand = useGameStore((state) => state.orderClearedToLand)
   const orderGoAround = useGameStore((state) => state.orderGoAround)
+  const triggerEmergency = useGameStore((state) => state.triggerEmergency)
 
   // Voice Command hook
   const { transcript, micActive, toggleListening } = useVoiceCommand()
@@ -63,7 +73,8 @@ export const TowerHUD: React.FC = () => {
     approach: true,
     tower: true,
     ground: true,
-    stand: true,
+    gates: true,
+    hangar: true,
   })
 
   const toggleSection = (key: string) => {
@@ -72,25 +83,32 @@ export const TowerHUD: React.FC = () => {
 
   const selectedAircraft = aircrafts.find((a) => a.id === selectedAircraftId)
 
-  // Group aircraft by frequency / operational phase
-  const approachPlanes = aircrafts.filter((a) => a.status === 'approach' || a.status === 'cruising')
+  // Group aircraft by operations section
+  const approachPlanes = aircrafts.filter((a) => a.status === 'approach' || a.status === 'cruising' || a.status === 'emergency')
   const towerPlanes = aircrafts.filter((a) => a.status === 'holding' || a.status === 'takeoff' || a.status === 'landing')
-  const groundPlanes = aircrafts.filter((a) => a.status === 'pushback' || a.status === 'taxiing')
-  const standPlanes = aircrafts.filter((a) => a.status === 'at_gate')
+  const groundPlanes = aircrafts.filter((a) => a.status === 'pushback' || a.status === 'taxi_to_runway' || a.status === 'taxi_to_gate' || a.status === 'taxi_to_hangar')
+  const gatePlanes = aircrafts.filter((a) => a.status === 'at_gate' || a.status === 'deboarding' || a.status === 'cleaning' || a.status === 'refueling' || a.status === 'maintenance_check' || a.status === 'boarding')
+  const hangarPlanes = aircrafts.filter((a) => a.status === 'in_hangar')
+
+  const cycleWeather = () => {
+    const list: WeatherCondition[] = ['Cerah', 'Hujan Badai', 'Kabut Tebal']
+    const nextIdx = (list.indexOf(weather.condition) + 1) % list.length
+    setWeatherCondition(list[nextIdx])
+  }
 
   return (
     <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-3 select-none overflow-hidden font-mono">
       {/* ============================================================== */}
-      {/* 1. PROFESSIONAL ATC TOP TELEMETRY BAR                          */}
+      {/* 1. TOP TELEMETRY & SYSTEM BAR                                  */}
       {/* ============================================================== */}
       <header className="flex items-center justify-between w-full pointer-events-auto">
-        {/* Left: ATC System & Telemetry */}
-        <div className="flex items-center gap-2.5">
-          {/* ATC Aviation Badge */}
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#071320]/90 border border-cyan-500/40 backdrop-blur-md shadow-[0_0_15px_rgba(0,229,255,0.2)]">
+        {/* Left: Operations Telemetry */}
+        <div className="flex items-center gap-2">
+          {/* Station Beacon Badge */}
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#071320]/90 border border-cyan-500/40 backdrop-blur-md shadow-[0_0_15px_rgba(0,229,255,0.25)]">
             <div className="w-2.5 h-2.5 rounded-full bg-[#00ffaa] animate-ping" />
             <span className="font-bold text-white tracking-wider text-xs">
-              ATC AVIATION <span className="text-cyan-400">| TOWER 3D</span>
+              SOEKARNO-HATTA TWR <span className="text-cyan-400">| CONTROL CAB</span>
             </span>
           </div>
 
@@ -100,7 +118,7 @@ export const TowerHUD: React.FC = () => {
             <span className="text-amber-300 font-semibold">{airMiles} Mil Udara</span>
           </div>
 
-          {/* Active Flights Counter + Add Traffic */}
+          {/* Flights Count + Add Traffic */}
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#071320]/85 border border-cyan-500/30 backdrop-blur-md text-white font-bold text-xs shadow-md">
             <Plane className="w-3.5 h-3.5 text-cyan-400" />
             <span className="text-gray-300">Trafik: <strong className="text-white">{aircrafts.length}/6</strong></span>
@@ -109,11 +127,11 @@ export const TowerHUD: React.FC = () => {
               className="ml-1 px-1.5 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center cursor-pointer transition-all shadow-sm text-[10px]"
               title="Spawn Traffic Baru"
             >
-              <Plus className="w-3 h-3 mr-0.5" /> TRAFFIC
+              <Plus className="w-3 h-3 mr-0.5" /> INBOUND
             </button>
           </div>
 
-          {/* Operations Score & Landed & Level */}
+          {/* Stats: Landed & Score */}
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#071320]/85 border border-gray-700/50 backdrop-blur-md text-xs">
             <span className="text-gray-400">LANDED: <strong className="text-emerald-400">{landedCount}</strong></span>
             <span className="text-gray-600">|</span>
@@ -121,24 +139,48 @@ export const TowerHUD: React.FC = () => {
             <span className="text-gray-600">|</span>
             <span className="text-gray-400">LVL: <strong className="text-amber-400">{airportLevel}</strong></span>
           </div>
+
+          {/* Interactive Weather Switcher Badge */}
+          <button
+            onClick={cycleWeather}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border backdrop-blur-md text-xs font-bold transition-all cursor-pointer shadow-md ${
+              weather.condition === 'Hujan Badai'
+                ? 'bg-blue-950/90 border-blue-400 text-blue-300 animate-pulse'
+                : weather.condition === 'Kabut Tebal'
+                ? 'bg-slate-900/90 border-slate-400 text-slate-300'
+                : 'bg-[#071320]/85 border-amber-500/40 text-amber-300'
+            }`}
+            title="Klik untuk ubah simulasi cuaca (Cerah / Hujan Badai / Kabut)"
+          >
+            {weather.condition === 'Hujan Badai' ? (
+              <CloudRain className="w-3.5 h-3.5 text-blue-400" />
+            ) : weather.condition === 'Kabut Tebal' ? (
+              <CloudFog className="w-3.5 h-3.5 text-slate-400" />
+            ) : (
+              <Sun className="w-3.5 h-3.5 text-amber-400" />
+            )}
+            <span>CUACA: {weather.condition.toUpperCase()}</span>
+          </button>
         </div>
 
-        {/* Right: Airport Station Identity */}
-        <div className="flex flex-col items-end pr-2">
-          <div className="text-sm font-bold tracking-wider text-cyan-300 flex items-center gap-1.5">
-            <Activity className="w-3.5 h-3.5 text-emerald-400" />
-            <span>SOEKARNO-HATTA TWR (WIII)</span>
-          </div>
-          <div className="text-[10px] text-gray-400 tracking-wide">
-            FREQ: 118.200 MHz • ATIS INFO 'B' • RUNWAY 09
-          </div>
+        {/* Right: Emergency Simulation Trigger & Runway Status */}
+        <div className="flex items-center gap-2">
+          {/* In-Flight Mayday Emergency Simulator Button */}
+          <button
+            onClick={() => triggerEmergency()}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-950/80 hover:bg-red-900 border border-red-500/60 text-red-300 text-xs font-bold shadow-[0_0_15px_rgba(255,50,50,0.4)] transition-all cursor-pointer"
+            title="Panggil Skenario Pendaratan Darurat (Mayday)"
+          >
+            <ShieldAlert className="w-4 h-4 text-red-400 animate-bounce" />
+            <span>SIMULASI DARURAT</span>
+          </button>
         </div>
       </header>
 
       {/* ============================================================== */}
-      {/* 2. RIGHT ACCORDION PANEL (ATC FREQUENCY CHANNELS)              */}
+      {/* 2. RIGHT ACCORDION PANEL (SECTIONS & GROUND STATUS)            */}
       {/* ============================================================== */}
-      <div className="absolute top-16 right-3 w-64 max-h-[75vh] flex flex-col gap-1.5 pointer-events-auto overflow-y-auto text-xs scrollbar-thin">
+      <div className="absolute top-16 right-3 w-68 max-h-[75vh] flex flex-col gap-1.5 pointer-events-auto overflow-y-auto text-xs scrollbar-thin">
         {/* PENDEKATAN (Approach 130.30) */}
         <div className="rounded-lg bg-[#06101c]/90 border border-cyan-500/40 backdrop-blur-md shadow-xl overflow-hidden">
           <div
@@ -149,34 +191,43 @@ export const TowerHUD: React.FC = () => {
               <div className="w-4 h-4 rounded bg-cyan-500 flex items-center justify-center">
                 <Plane className="w-2.5 h-2.5 text-black" />
               </div>
-              <span className="font-bold text-cyan-300">PENDEKATAN</span>
+              <span className="font-bold text-cyan-300">PENDEKATAN (APPROACH)</span>
             </div>
             <div className="flex items-center gap-1 text-[10px] text-cyan-400">
-              <span>130.30</span>
+              <span>{approachPlanes.length}</span>
               {openSections.approach ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
             </div>
           </div>
           {openSections.approach && (
             <div className="p-1 flex flex-col gap-1 bg-[#050c15]">
               {approachPlanes.length === 0 ? (
-                <div className="text-[10px] text-gray-500 text-center py-1">Tidak ada pesawat</div>
+                <div className="text-[10px] text-gray-500 text-center py-1">Tidak ada pesawat inbound</div>
               ) : (
                 approachPlanes.map((ac) => (
                   <div
                     key={ac.id}
                     onClick={() => selectAircraft(ac.id)}
                     className={`flex items-center justify-between p-1.5 rounded cursor-pointer transition-all ${
-                      ac.id === selectedAircraftId
+                      ac.status === 'emergency'
+                        ? 'bg-red-950/80 border border-red-500 text-white font-bold animate-pulse'
+                        : ac.id === selectedAircraftId
                         ? 'bg-cyan-600/30 border border-cyan-400 text-white font-bold shadow-[0_0_10px_rgba(0,229,255,0.3)]'
                         : 'bg-gray-900/60 hover:bg-gray-800/80 text-gray-300 border border-transparent'
                     }`}
                   >
                     <div>
-                      <span className="text-white block font-bold">{ac.id}</span>
+                      <div className="flex items-center gap-1">
+                        <span className="text-white block font-bold">{ac.id}</span>
+                        {ac.status === 'emergency' && (
+                          <span className="px-1 rounded bg-red-600 text-[8px] text-white font-black animate-bounce">
+                            MAYDAY
+                          </span>
+                        )}
+                      </div>
                       <span className="text-[9px] text-cyan-300">{ac.airline || 'Airliner'}</span>
                     </div>
                     <div className="text-right text-[10px]">
-                      <span className="text-cyan-400 block">FL0{Math.round(ac.altitude / 100)}</span>
+                      <span className="text-cyan-400 block font-bold">ALT {ac.altitude} FT</span>
                       <span className="text-gray-400 text-[9px] uppercase">{ac.status}</span>
                     </div>
                   </div>
@@ -186,7 +237,7 @@ export const TowerHUD: React.FC = () => {
           )}
         </div>
 
-        {/* MENARA (Tower 121.32) */}
+        {/* MENARA RUNWAY 09 */}
         <div className="rounded-lg bg-[#06101c]/90 border border-red-500/40 backdrop-blur-md shadow-xl overflow-hidden">
           <div
             onClick={() => toggleSection('tower')}
@@ -199,14 +250,14 @@ export const TowerHUD: React.FC = () => {
               <span className="font-bold text-red-300">MENARA (RUNWAY 09)</span>
             </div>
             <div className="flex items-center gap-1 text-[10px] text-red-400">
-              <span>121.32</span>
+              <span>{towerPlanes.length}</span>
               {openSections.tower ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
             </div>
           </div>
           {openSections.tower && (
             <div className="p-1 flex flex-col gap-1 bg-[#050c15]">
               {towerPlanes.length === 0 ? (
-                <div className="text-[10px] text-gray-500 text-center py-1">Tidak ada pesawat</div>
+                <div className="text-[10px] text-gray-500 text-center py-1">Runway kosong</div>
               ) : (
                 towerPlanes.map((ac) => (
                   <div
@@ -220,7 +271,7 @@ export const TowerHUD: React.FC = () => {
                   >
                     <div>
                       <span className="text-white block font-bold">{ac.id}</span>
-                      <span className="text-[9px] text-red-300">Threshold 09</span>
+                      <span className="text-[9px] text-red-300">{ac.destination}</span>
                     </div>
                     <div className="text-right text-[10px]">
                       <span className="text-amber-400 block font-bold uppercase">{ac.status}</span>
@@ -232,7 +283,7 @@ export const TowerHUD: React.FC = () => {
           )}
         </div>
 
-        {/* TANAH (Ground 121.75) */}
+        {/* TANAH (GROUND / TAXI & APRON) */}
         <div className="rounded-lg bg-[#06101c]/90 border border-amber-500/40 backdrop-blur-md shadow-xl overflow-hidden">
           <div
             onClick={() => toggleSection('ground')}
@@ -242,17 +293,17 @@ export const TowerHUD: React.FC = () => {
               <div className="w-4 h-4 rounded bg-amber-500 flex items-center justify-center">
                 <Truck className="w-2.5 h-2.5 text-black" />
               </div>
-              <span className="font-bold text-amber-300">TANAH (GROUND)</span>
+              <span className="font-bold text-amber-300">TANAH (GROUND / TAXI)</span>
             </div>
             <div className="flex items-center gap-1 text-[10px] text-amber-400">
-              <span>121.75</span>
+              <span>{groundPlanes.length}</span>
               {openSections.ground ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
             </div>
           </div>
           {openSections.ground && (
             <div className="p-1 flex flex-col gap-1 bg-[#050c15]">
               {groundPlanes.length === 0 ? (
-                <div className="text-[10px] text-gray-500 text-center py-1">Tidak ada pesawat</div>
+                <div className="text-[10px] text-gray-500 text-center py-1">Tidak ada pergerakan darat</div>
               ) : (
                 groundPlanes.map((ac) => (
                   <div
@@ -266,10 +317,12 @@ export const TowerHUD: React.FC = () => {
                   >
                     <div>
                       <span className="text-white block font-bold">{ac.id}</span>
-                      <span className="text-[9px] text-amber-300">Taxiway Alpha</span>
+                      <span className="text-[9px] text-amber-300">
+                        {ac.status === 'pushback' ? '🚜 Pushback' : '🚕 Taksi'}
+                      </span>
                     </div>
                     <div className="text-right text-[10px]">
-                      <span className="text-amber-400 block uppercase font-bold">{ac.status}</span>
+                      <span className="text-amber-400 block font-bold uppercase">{ac.status.replace(/_/g, ' ')}</span>
                     </div>
                   </div>
                 ))
@@ -278,45 +331,95 @@ export const TowerHUD: React.FC = () => {
           )}
         </div>
 
-        {/* DI STAND (Gate Stand Parked) */}
-        <div className="rounded-lg bg-[#06101c]/90 border border-gray-600/40 backdrop-blur-md shadow-xl overflow-hidden">
+        {/* TERMINAL & GATES (APRON TURNAROUND) */}
+        <div className="rounded-lg bg-[#06101c]/90 border border-blue-500/40 backdrop-blur-md shadow-xl overflow-hidden">
           <div
-            onClick={() => toggleSection('stand')}
-            className="flex items-center justify-between px-2.5 py-1.5 bg-gray-900/80 hover:bg-gray-800/80 cursor-pointer border-b border-gray-700/40"
+            onClick={() => toggleSection('gates')}
+            className="flex items-center justify-between px-2.5 py-1.5 bg-blue-950/70 hover:bg-blue-900/60 cursor-pointer border-b border-blue-500/30"
           >
             <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-gray-400 flex items-center justify-center">
+              <div className="w-4 h-4 rounded bg-blue-500 flex items-center justify-center">
                 <Compass className="w-2.5 h-2.5 text-black" />
               </div>
-              <span className="font-bold text-gray-200">DI STAND (PARKIR)</span>
+              <span className="font-bold text-blue-300">TERMINAL & GATES (APRON)</span>
             </div>
-            <div className="flex items-center gap-1 text-[10px] text-gray-400">
-              <span>{standPlanes.length}</span>
-              {openSections.stand ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+            <div className="flex items-center gap-1 text-[10px] text-blue-400">
+              <span>{gatePlanes.length}</span>
+              {openSections.gates ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
             </div>
           </div>
-          {openSections.stand && (
+          {openSections.gates && (
             <div className="p-1 flex flex-col gap-1 bg-[#050c15]">
-              {standPlanes.length === 0 ? (
-                <div className="text-[10px] text-gray-500 text-center py-1">Tidak ada pesawat</div>
+              {gatePlanes.length === 0 ? (
+                <div className="text-[10px] text-gray-500 text-center py-1">Semua Gate Kosong</div>
               ) : (
-                standPlanes.map((ac) => (
+                gatePlanes.map((ac) => (
                   <div
                     key={ac.id}
                     onClick={() => selectAircraft(ac.id)}
-                    className={`flex items-center justify-between p-1.5 rounded cursor-pointer transition-all ${
+                    className={`flex flex-col p-1.5 rounded cursor-pointer transition-all ${
                       ac.id === selectedAircraftId
                         ? 'bg-blue-600/30 border border-blue-400 text-white font-bold shadow-[0_0_10px_rgba(0,150,255,0.3)]'
                         : 'bg-gray-900/60 hover:bg-gray-800/80 text-gray-300 border border-transparent'
                     }`}
                   >
+                    <div className="flex items-center justify-between">
+                      <span className="text-white font-bold">{ac.id} • {ac.gate || 'Gate 1'}</span>
+                      <span className="text-emerald-400 text-[9px] font-bold uppercase">{ac.status.replace(/_/g, ' ')}</span>
+                    </div>
+                    {/* Turnaround Progress Bar if actively servicing */}
+                    {ac.serviceProgress !== undefined && ac.serviceProgress > 0 && ac.serviceProgress < 100 && (
+                      <div className="w-full bg-gray-800 h-1.5 rounded-full overflow-hidden mt-1">
+                        <div
+                          className="bg-emerald-400 h-full transition-all duration-300"
+                          style={{ width: `${ac.serviceProgress}%` }}
+                        />
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between text-[9px] text-gray-400 mt-0.5">
+                      <span>👥 {ac.passengers?.current || 0} pax</span>
+                      <span>⛽ {ac.fuel}%</span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* HANGAR PERAWATAN */}
+        <div className="rounded-lg bg-[#06101c]/90 border border-slate-600/40 backdrop-blur-md shadow-xl overflow-hidden">
+          <div
+            onClick={() => toggleSection('hangar')}
+            className="flex items-center justify-between px-2.5 py-1.5 bg-slate-900/80 hover:bg-slate-800/80 cursor-pointer border-b border-slate-700/40"
+          >
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded bg-slate-400 flex items-center justify-center">
+                <Wrench className="w-2.5 h-2.5 text-black" />
+              </div>
+              <span className="font-bold text-slate-200">HANGAR PERAWATAN</span>
+            </div>
+            <div className="flex items-center gap-1 text-[10px] text-slate-400">
+              <span>{hangarPlanes.length}</span>
+              {openSections.hangar ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+            </div>
+          </div>
+          {openSections.hangar && (
+            <div className="p-1 flex flex-col gap-1 bg-[#050c15]">
+              {hangarPlanes.length === 0 ? (
+                <div className="text-[10px] text-gray-500 text-center py-1">Tidak ada pesawat di hangar</div>
+              ) : (
+                hangarPlanes.map((ac) => (
+                  <div
+                    key={ac.id}
+                    onClick={() => selectAircraft(ac.id)}
+                    className="flex items-center justify-between p-1.5 rounded bg-slate-800/60 text-gray-200 cursor-pointer"
+                  >
                     <div>
                       <span className="text-white block font-bold">{ac.id}</span>
-                      <span className="text-[9px] text-gray-400">{ac.gate || 'Stand 1'} • {ac.destination}</span>
+                      <span className="text-[9px] text-amber-300">Pemeriksaan Berkala</span>
                     </div>
-                    <div className="text-right text-[10px]">
-                      <span className="text-emerald-400 block font-bold">READY PUSHBACK</span>
-                    </div>
+                    <span className="text-emerald-400 text-[10px] font-bold">PERBAIKAN</span>
                   </div>
                 ))
               )}
@@ -326,12 +429,12 @@ export const TowerHUD: React.FC = () => {
       </div>
 
       {/* ============================================================== */}
-      {/* 3. BOTTOM AREA: REALISTIC PILOT TRANSMISSION & CLEARANCES      */}
+      {/* 3. BOTTOM AREA: REALISTIC PILOT TRANSMISSION & OPERATIONS BAR  */}
       {/* ============================================================== */}
-      <footer className="w-full flex flex-col gap-2.5 pointer-events-auto">
-        {/* INTERACTIVE PILOT TRANSMISSION DIALOG BOX (REALISTIC AVIATOR AVATAR) */}
+      <footer className="w-full flex flex-col gap-2 pointer-events-auto">
+        {/* INTERACTIVE PILOT & GROUND CREW AUDIO TRANSMISSION DIALOG */}
         {tutorialActive && (
-          <div className="self-center max-w-xl w-full bg-[#071320]/95 border-2 border-cyan-400/80 rounded-xl p-3 px-4 backdrop-blur-md shadow-[0_4px_30px_rgba(0,229,255,0.35)] flex items-center gap-4 animate-bounce-subtle">
+          <div className="self-center max-w-2xl w-full bg-[#071320]/95 border-2 border-cyan-400/80 rounded-xl p-3 px-4 backdrop-blur-md shadow-[0_4px_30px_rgba(0,229,255,0.35)] flex items-center gap-4 animate-bounce-subtle">
             {/* Real Professional Pilot Avatar Photo */}
             <div className="relative shrink-0">
               <img
@@ -349,7 +452,7 @@ export const TowerHUD: React.FC = () => {
               <div className="flex items-center justify-between border-b border-cyan-500/30 pb-1 mb-1">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-bold tracking-wider text-cyan-300">
-                    KAPTEN PILOT (VHF 118.200)
+                    TRANSMISI RADIO ATC (VHF 118.200 MHz)
                   </span>
                   <div className="flex items-center gap-0.5">
                     <span className="w-1 h-3 bg-cyan-400 rounded-full animate-pulse" />
@@ -360,10 +463,10 @@ export const TowerHUD: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => radioSound.speakPilotVoice(tutorialText)}
-                    className="p-1 rounded bg-cyan-500/20 hover:bg-cyan-500/40 text-cyan-300 border border-cyan-500/50 cursor-pointer text-[10px] flex items-center gap-1"
+                    className="p-1 rounded bg-cyan-500/20 hover:bg-cyan-500/40 text-cyan-300 border border-cyan-500/50 cursor-pointer text-[10px] flex items-center gap-1 font-bold"
                     title="Dengarkan Suara Pilot"
                   >
-                    <Volume2 className="w-3 h-3" /> SUARA
+                    <Volume2 className="w-3 h-3" /> SUARA PILOT
                   </button>
                   <button
                     onClick={dismissTutorial}
@@ -380,23 +483,29 @@ export const TowerHUD: React.FC = () => {
           </div>
         )}
 
-        {/* BOTTOM ROW: WEATHER & CAMERAS (LEFT) + ACTION TOOLBAR (CENTER) + PTT (RIGHT) */}
+        {/* BOTTOM ROW: WEATHER & CAMERAS (LEFT) + REAL GROUND OPERATIONS (CENTER) + PTT (RIGHT) */}
         <div className="flex items-end justify-between w-full gap-3">
-          {/* Bottom Left: Weather & Camera Controls */}
+          {/* Bottom Left: Weather Card & Cameras */}
           <div className="flex flex-col gap-2">
             {/* Weather Card */}
             <div className="p-2.5 rounded-lg bg-[#071320]/90 border border-gray-700/60 backdrop-blur-md text-white font-mono text-[11px] shadow-lg flex flex-col gap-0.5">
               <div className="flex items-center gap-1.5 font-bold text-amber-300">
-                <Sun className="w-3.5 h-3.5 text-amber-400" />
-                <span>CUACA: {weather.condition}</span>
+                {weather.condition === 'Hujan Badai' ? (
+                  <CloudRain className="w-3.5 h-3.5 text-blue-400" />
+                ) : weather.condition === 'Kabut Tebal' ? (
+                  <CloudFog className="w-3.5 h-3.5 text-slate-400" />
+                ) : (
+                  <Sun className="w-3.5 h-3.5 text-amber-400" />
+                )}
+                <span>CUACA: {weather.condition.toUpperCase()}</span>
               </div>
               <div className="text-[10px] text-gray-300">
                 Suhu: {weather.temp}°C | Angin: {weather.wind}
               </div>
-              <div className="text-[10px] text-gray-400">{weather.time} WIB • QNH 1012 hPa</div>
+              <div className="text-[10px] text-gray-400">{weather.time} WIB • Vis: {weather.visibility}m</div>
             </div>
 
-            {/* Camera Presets & Speed */}
+            {/* Camera Switcher Buttons */}
             <div className="flex items-center gap-1 p-1 bg-[#071320]/90 border border-cyan-500/30 rounded-lg backdrop-blur-md shadow-lg">
               <button
                 onClick={() => setViewMode('tower')}
@@ -405,7 +514,7 @@ export const TowerHUD: React.FC = () => {
                     ? 'bg-cyan-500 text-black font-bold shadow-md'
                     : 'text-gray-300 hover:text-white hover:bg-white/10'
                 }`}
-                title="Pandangan Menara (Drag mouse untuk melihat sekeliling)"
+                title="Pandangan Menara (Drag mouse untuk melihat sekeliling bandara)"
               >
                 <Camera className="w-4 h-4" />
               </button>
@@ -417,7 +526,7 @@ export const TowerHUD: React.FC = () => {
                     ? 'bg-cyan-500 text-black font-bold shadow-md'
                     : 'text-gray-300 hover:text-white hover:bg-white/10'
                 }`}
-                title="Teropong Menara (Zoom ke pesawat terpilih)"
+                title="Teropong Menara (Zoom fokus ke pesawat)"
               >
                 <Search className="w-4 h-4" />
               </button>
@@ -434,18 +543,6 @@ export const TowerHUD: React.FC = () => {
                 <Eye className="w-4 h-4" />
               </button>
 
-              <button
-                onClick={() => setViewMode('radar2d')}
-                className={`p-1.5 rounded transition-all cursor-pointer ${
-                  viewMode === 'radar2d'
-                    ? 'bg-cyan-500 text-black font-bold shadow-md'
-                    : 'text-gray-300 hover:text-white hover:bg-white/10'
-                }`}
-                title="Layar Radar 2D TRACON"
-              >
-                <Radar className="w-4 h-4" />
-              </button>
-
               <div className="w-[1px] h-4 bg-gray-700 mx-0.5" />
 
               <button
@@ -459,125 +556,169 @@ export const TowerHUD: React.FC = () => {
           </div>
 
           {/* ============================================================== */}
-          {/* BOTTOM CENTER: PROFESSIONAL CLEARANCE TOOLBAR                  */}
+          {/* BOTTOM CENTER: COMPREHENSIVE GROUND & FLIGHT OPERATIONS BAR    */}
           {/* ============================================================== */}
-          <div className="flex items-center gap-1.5 p-2 rounded-xl bg-[#06101c]/95 border border-cyan-500/40 backdrop-blur-md shadow-[0_4px_30px_rgba(0,0,0,0.8)]">
-            {/* 1. Ground Frequency */}
-            <button
-              onClick={() => setActiveChannel('ground')}
-              className={`flex flex-col items-center justify-center p-2 rounded-lg min-w-[58px] transition-all cursor-pointer ${
-                activeChannel === 'ground' ? 'bg-amber-500/25 border border-amber-400 text-amber-300' : 'text-gray-400 hover:text-white hover:bg-white/10'
-              }`}
-            >
-              <Truck className="w-5 h-5 mb-0.5" />
-              <span className="text-[9px] font-bold">Tanah</span>
-            </button>
+          <div className="flex items-center gap-1.5 p-2 rounded-xl bg-[#06101c]/95 border border-cyan-500/40 backdrop-blur-md shadow-[0_4px_30px_rgba(0,0,0,0.85)]">
+            {/* 1. Arahkan ke Gate / Hangar */}
+            <div className="flex items-center gap-1 border-r border-gray-700/60 pr-2">
+              <button
+                onClick={() => selectedAircraft && assignDestination(selectedAircraft.id, 'Gate 1')}
+                disabled={!selectedAircraft || (selectedAircraft.status !== 'at_gate' && selectedAircraft.status !== 'taxi_to_gate' && selectedAircraft.status !== 'landing')}
+                className="flex flex-col items-center justify-center p-1.5 rounded-lg min-w-[50px] bg-blue-950/60 hover:bg-blue-900 border border-blue-500/40 text-blue-300 disabled:opacity-20 cursor-pointer"
+                title="Arahkan ke Gate 1"
+              >
+                <Compass className="w-4 h-4 mb-0.5" />
+                <span className="text-[8px] font-bold">Gate 1</span>
+              </button>
+              <button
+                onClick={() => selectedAircraft && assignDestination(selectedAircraft.id, 'Gate 2')}
+                disabled={!selectedAircraft || (selectedAircraft.status !== 'at_gate' && selectedAircraft.status !== 'taxi_to_gate' && selectedAircraft.status !== 'landing')}
+                className="flex flex-col items-center justify-center p-1.5 rounded-lg min-w-[50px] bg-blue-950/60 hover:bg-blue-900 border border-blue-500/40 text-blue-300 disabled:opacity-20 cursor-pointer"
+                title="Arahkan ke Gate 2"
+              >
+                <Compass className="w-4 h-4 mb-0.5" />
+                <span className="text-[8px] font-bold">Gate 2</span>
+              </button>
+              <button
+                onClick={() => selectedAircraft && assignDestination(selectedAircraft.id, 'Hangar')}
+                disabled={!selectedAircraft}
+                className="flex flex-col items-center justify-center p-1.5 rounded-lg min-w-[52px] bg-slate-900 hover:bg-slate-800 border border-slate-500/40 text-slate-300 disabled:opacity-20 cursor-pointer"
+                title="Arahkan ke Hangar Perawatan"
+              >
+                <Wrench className="w-4 h-4 mb-0.5 text-amber-400" />
+                <span className="text-[8px] font-bold">Hangar</span>
+              </button>
+            </div>
 
-            {/* 2. Reposisi / Go Around */}
-            <button
-              onClick={() => selectedAircraft && orderGoAround(selectedAircraft.id)}
-              disabled={!selectedAircraft}
-              className="flex flex-col items-center justify-center p-2 rounded-lg min-w-[58px] text-gray-400 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
-            >
-              <ArrowRightLeft className="w-5 h-5 mb-0.5" />
-              <span className="text-[9px] font-bold">Pergi Kesana</span>
-            </button>
+            {/* 2. Turnaround Service Operations */}
+            <div className="flex items-center gap-1 border-r border-gray-700/60 pr-2">
+              {/* Penurunan Penumpang */}
+              <button
+                onClick={() => selectedAircraft && startDeboarding(selectedAircraft.id)}
+                disabled={!selectedAircraft || selectedAircraft.status !== 'at_gate'}
+                className="flex flex-col items-center justify-center p-1.5 rounded-lg min-w-[56px] bg-indigo-950/70 hover:bg-indigo-900 border border-indigo-500/50 text-indigo-300 disabled:opacity-20 cursor-pointer"
+                title="Mulai Penurunan Penumpang & Bagasi"
+              >
+                <Users className="w-4 h-4 mb-0.5" />
+                <span className="text-[8px] font-bold text-center leading-tight">Turunkan<br />Pax</span>
+              </button>
 
-            {/* 3. Stand / Gate */}
-            <button
-              onClick={() => setActiveChannel('stand')}
-              className={`flex flex-col items-center justify-center p-2 rounded-lg min-w-[58px] transition-all cursor-pointer ${
-                activeChannel === 'stand' ? 'bg-cyan-500/25 border border-cyan-400 text-cyan-300' : 'text-gray-400 hover:text-white hover:bg-white/10'
-              }`}
-            >
-              <Compass className="w-5 h-5 mb-0.5" />
-              <span className="text-[9px] font-bold">Berdiri</span>
-            </button>
+              {/* Bersihkan & Cek Kabin */}
+              <button
+                onClick={() => selectedAircraft && startCabinService(selectedAircraft.id)}
+                disabled={!selectedAircraft || (selectedAircraft.status !== 'at_gate' && selectedAircraft.status !== 'deboarding')}
+                className="flex flex-col items-center justify-center p-1.5 rounded-lg min-w-[56px] bg-teal-950/70 hover:bg-teal-900 border border-teal-500/50 text-teal-300 disabled:opacity-20 cursor-pointer"
+                title="Pembersihan & Cek Kabin"
+              >
+                <Sparkles className="w-4 h-4 mb-0.5" />
+                <span className="text-[8px] font-bold text-center leading-tight">Cek & Rapih<br />Kabin</span>
+              </button>
 
-            {/* 4. Dorongan Kembali (Pushback) */}
-            <button
-              onClick={() => selectedAircraft && orderPushback(selectedAircraft.id)}
-              disabled={!selectedAircraft || selectedAircraft.status !== 'at_gate'}
-              className="flex flex-col items-center justify-center p-2 rounded-lg min-w-[62px] bg-blue-600/35 hover:bg-blue-600/60 border border-blue-400/60 text-blue-200 disabled:opacity-25 disabled:cursor-not-allowed transition-all cursor-pointer shadow-sm"
-              title="Izin Dorongan Kembali (Pushback)"
-            >
-              <Truck className="w-5 h-5 mb-0.5 text-blue-300" />
-              <span className="text-[9px] font-bold text-center leading-none">Dorongan<br />kembali</span>
-            </button>
+              {/* Pengisian Bahan Bakar Avtur */}
+              <button
+                onClick={() => selectedAircraft && startRefueling(selectedAircraft.id)}
+                disabled={!selectedAircraft || selectedAircraft.status !== 'at_gate'}
+                className="flex flex-col items-center justify-center p-1.5 rounded-lg min-w-[56px] bg-amber-950/70 hover:bg-amber-900 border border-amber-500/50 text-amber-300 disabled:opacity-20 cursor-pointer"
+                title="Truk Tangki Mengisi Bahan Bakar Avtur"
+              >
+                <Fuel className="w-4 h-4 mb-0.5 text-amber-400" />
+                <span className="text-[8px] font-bold text-center leading-tight">Isi<br />Avtur</span>
+              </button>
 
-            {/* 5. Taksi (Taxi to Holding Point) */}
-            <button
-              onClick={() => selectedAircraft && orderTaxi(selectedAircraft.id)}
-              disabled={!selectedAircraft || (selectedAircraft.status !== 'pushback' && selectedAircraft.status !== 'at_gate')}
-              className="flex flex-col items-center justify-center p-2 rounded-lg min-w-[58px] bg-amber-600/35 hover:bg-amber-600/60 border border-amber-400/60 text-amber-200 disabled:opacity-25 disabled:cursor-not-allowed transition-all cursor-pointer shadow-sm"
-              title="Taksi ke Titik Tunggu Runway 09"
-            >
-              <Plane className="w-5 h-5 mb-0.5 text-amber-300 rotate-45" />
-              <span className="text-[9px] font-bold">Taksi</span>
-            </button>
+              {/* Pengecekan Teknis Pesawat */}
+              <button
+                onClick={() => selectedAircraft && startTechnicalCheck(selectedAircraft.id)}
+                disabled={!selectedAircraft || (selectedAircraft.status !== 'at_gate' && selectedAircraft.status !== 'in_hangar')}
+                className="flex flex-col items-center justify-center p-1.5 rounded-lg min-w-[56px] bg-orange-950/70 hover:bg-orange-900 border border-orange-500/50 text-orange-300 disabled:opacity-20 cursor-pointer"
+                title="Pemeriksaan Teknis Walkaround Teknisi"
+              >
+                <Wrench className="w-4 h-4 mb-0.5" />
+                <span className="text-[8px] font-bold text-center leading-tight">Cek<br />Teknis</span>
+              </button>
 
-            {/* 6. Lepas Landas (Cleared for Takeoff) */}
-            <button
-              onClick={() => selectedAircraft && orderTakeoff(selectedAircraft.id)}
-              disabled={!selectedAircraft || (selectedAircraft.status !== 'holding' && selectedAircraft.status !== 'taxiing')}
-              className="flex flex-col items-center justify-center p-2 rounded-lg min-w-[62px] bg-emerald-600/35 hover:bg-emerald-600/60 border border-emerald-400/60 text-emerald-200 disabled:opacity-25 disabled:cursor-not-allowed transition-all cursor-pointer shadow-sm"
-              title="Izin Lepas Landas Runway 09"
-            >
-              <Send className="w-5 h-5 mb-0.5 text-emerald-300 -rotate-45" />
-              <span className="text-[9px] font-bold text-center leading-none">Lepas<br />landas</span>
-            </button>
+              {/* Penaikan Penumpang (Boarding) */}
+              <button
+                onClick={() => selectedAircraft && startBoarding(selectedAircraft.id)}
+                disabled={!selectedAircraft || selectedAircraft.status !== 'at_gate'}
+                className="flex flex-col items-center justify-center p-1.5 rounded-lg min-w-[56px] bg-emerald-950/70 hover:bg-emerald-900 border border-emerald-500/50 text-emerald-300 disabled:opacity-20 cursor-pointer"
+                title="Boarding Penumpang Penerbangan Baru"
+              >
+                <Users className="w-4 h-4 mb-0.5 text-emerald-400" />
+                <span className="text-[8px] font-bold text-center leading-tight">Naikkan<br />Pax</span>
+              </button>
+            </div>
 
-            {/* 6b. Izin Mendarat (Cleared to Land) */}
-            <button
-              onClick={() => selectedAircraft && orderClearedToLand(selectedAircraft.id)}
-              disabled={!selectedAircraft || selectedAircraft.status !== 'approach'}
-              className="flex flex-col items-center justify-center p-2 rounded-lg min-w-[62px] bg-cyan-600/35 hover:bg-cyan-600/60 border border-cyan-400/60 text-cyan-200 disabled:opacity-25 disabled:cursor-not-allowed transition-all cursor-pointer shadow-sm"
-              title="Izin Mendarat Runway 09"
-            >
-              <CheckCircle className="w-5 h-5 mb-0.5 text-cyan-300" />
-              <span className="text-[9px] font-bold text-center leading-none">Izin<br />Mendarat</span>
-            </button>
+            {/* 3. Flight Clearances (Pushback, Taxi, Takeoff, Land) */}
+            <div className="flex items-center gap-1">
+              {/* Dorongan Kembali (Pushback) */}
+              <button
+                onClick={() => selectedAircraft && orderPushback(selectedAircraft.id)}
+                disabled={!selectedAircraft || selectedAircraft.status !== 'at_gate'}
+                className="flex flex-col items-center justify-center p-1.5 rounded-lg min-w-[58px] bg-blue-600/35 hover:bg-blue-600/60 border border-blue-400/60 text-blue-200 disabled:opacity-20 cursor-pointer"
+                title="Izin Dorongan Kembali (Pushback)"
+              >
+                <Truck className="w-4 h-4 mb-0.5 text-blue-300" />
+                <span className="text-[8px] font-bold text-center leading-none">Dorongan<br />kembali</span>
+              </button>
 
-            {/* 7. Tahan Posisi (Hold) */}
-            <button
-              onClick={() => selectedAircraft && orderHold(selectedAircraft.id)}
-              disabled={!selectedAircraft}
-              className="flex flex-col items-center justify-center p-2 rounded-lg min-w-[58px] bg-red-600/35 hover:bg-red-600/60 border border-red-400/60 text-red-200 disabled:opacity-25 disabled:cursor-not-allowed transition-all cursor-pointer shadow-sm"
-              title="Tahan Posisi / Stop"
-            >
-              <Octagon className="w-5 h-5 mb-0.5 text-red-400" />
-              <span className="text-[9px] font-bold">Tahan</span>
-            </button>
+              {/* Taksi ke Runway 09 */}
+              <button
+                onClick={() => selectedAircraft && orderTaxi(selectedAircraft.id)}
+                disabled={!selectedAircraft || (selectedAircraft.status !== 'holding' && selectedAircraft.status !== 'at_gate' && selectedAircraft.status !== 'in_hangar')}
+                className="flex flex-col items-center justify-center p-1.5 rounded-lg min-w-[56px] bg-amber-600/35 hover:bg-amber-600/60 border border-amber-400/60 text-amber-200 disabled:opacity-20 cursor-pointer"
+                title="Taksi ke Titik Tunggu Runway 09"
+              >
+                <Plane className="w-4 h-4 mb-0.5 text-amber-300 rotate-45" />
+                <span className="text-[8px] font-bold">Taksi</span>
+              </button>
 
-            {/* 8. Transfer Frequensi */}
-            <button
-              onClick={() => setActiveChannel('tower')}
-              className="flex flex-col items-center justify-center p-2 rounded-lg min-w-[58px] text-gray-400 hover:text-white hover:bg-white/10 transition-all cursor-pointer"
-            >
-              <Radio className="w-5 h-5 mb-0.5" />
-              <span className="text-[9px] font-bold">Transfer</span>
-            </button>
+              {/* Izin Lepas Landas (Takeoff) */}
+              <button
+                onClick={() => selectedAircraft && orderTakeoff(selectedAircraft.id)}
+                disabled={!selectedAircraft || (selectedAircraft.status !== 'holding' && selectedAircraft.status !== 'taxi_to_runway')}
+                className="flex flex-col items-center justify-center p-1.5 rounded-lg min-w-[58px] bg-emerald-600/35 hover:bg-emerald-600/60 border border-emerald-400/60 text-emerald-200 disabled:opacity-20 cursor-pointer"
+                title="Izin Lepas Landas Runway 09"
+              >
+                <Send className="w-4 h-4 mb-0.5 text-emerald-300 -rotate-45" />
+                <span className="text-[8px] font-bold text-center leading-none">Lepas<br />landas</span>
+              </button>
 
-            {/* 9. Darurat (Emergency Priority) */}
-            <button
-              onClick={() => {
-                if (selectedAircraft) {
-                  useGameStore.setState((state) => ({
-                    aircrafts: state.aircrafts.map((a) =>
-                      a.id === selectedAircraft.id ? { ...a, status: 'emergency' } : a
-                    ),
-                  }))
-                }
-              }}
-              disabled={!selectedAircraft}
-              className="flex flex-col items-center justify-center p-2 rounded-lg min-w-[58px] text-red-400 hover:bg-red-600/20 disabled:opacity-25 disabled:cursor-not-allowed transition-all cursor-pointer"
-            >
-              <AlertTriangle className="w-5 h-5 mb-0.5" />
-              <span className="text-[9px] font-bold">Darurat</span>
-            </button>
+              {/* Izin Mendarat (Cleared to Land) */}
+              <button
+                onClick={() => selectedAircraft && orderClearedToLand(selectedAircraft.id)}
+                disabled={!selectedAircraft || (selectedAircraft.status !== 'approach' && selectedAircraft.status !== 'emergency')}
+                className="flex flex-col items-center justify-center p-1.5 rounded-lg min-w-[58px] bg-cyan-600/35 hover:bg-cyan-600/60 border border-cyan-400/60 text-cyan-200 disabled:opacity-20 cursor-pointer"
+                title="Izin Mendarat Runway 09"
+              >
+                <CheckCircle className="w-4 h-4 mb-0.5 text-cyan-300" />
+                <span className="text-[8px] font-bold text-center leading-none">Izin<br />Mendarat</span>
+              </button>
+
+              {/* Tahan Posisi (Hold) */}
+              <button
+                onClick={() => selectedAircraft && orderHold(selectedAircraft.id)}
+                disabled={!selectedAircraft}
+                className="flex flex-col items-center justify-center p-1.5 rounded-lg min-w-[54px] bg-red-600/35 hover:bg-red-600/60 border border-red-400/60 text-red-200 disabled:opacity-20 cursor-pointer"
+                title="Tahan Posisi / Berhenti"
+              >
+                <Octagon className="w-4 h-4 mb-0.5 text-red-400" />
+                <span className="text-[8px] font-bold">Tahan</span>
+              </button>
+
+              {/* Go Around */}
+              <button
+                onClick={() => selectedAircraft && orderGoAround(selectedAircraft.id)}
+                disabled={!selectedAircraft || selectedAircraft.status !== 'approach'}
+                className="flex flex-col items-center justify-center p-1.5 rounded-lg min-w-[54px] bg-purple-950/60 hover:bg-purple-900 border border-purple-400/50 text-purple-200 disabled:opacity-20 cursor-pointer"
+                title="Batalkan Pendaratan / Putar Balik"
+              >
+                <ArrowRightLeft className="w-4 h-4 mb-0.5" />
+                <span className="text-[8px] font-bold text-center leading-none">Go<br />Around</span>
+              </button>
+            </div>
           </div>
 
-          {/* Bottom Right: Voice Mic & Drag Guide Hint */}
+          {/* Bottom Right: Voice Mic & Guidance */}
           <div className="flex flex-col items-end gap-1.5">
             {/* Live Transcript Bubble */}
             {transcript && (
@@ -599,9 +740,9 @@ export const TowerHUD: React.FC = () => {
               <span>PTT MIC [SPACE]</span>
             </button>
 
-            {/* First-person Drag Guide badge */}
+            {/* Mouse Drag Hint */}
             <div className="px-2.5 py-1 rounded bg-[#071320]/80 border border-gray-700/60 text-[10px] text-gray-300 font-mono backdrop-blur-sm">
-              🖱️ Drag mouse pada layar untuk memutar kamera Menara 3D
+              🖱️ Drag mouse untuk memutar pandangan Menara 3D
             </div>
           </div>
         </div>

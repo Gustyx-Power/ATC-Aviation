@@ -4,26 +4,35 @@ export interface Waypoint {
 }
 
 export type AircraftStatus =
+  | 'approach'
+  | 'landing'
+  | 'taxi_to_gate'
   | 'at_gate'
+  | 'deboarding'
+  | 'cleaning'
+  | 'refueling'
+  | 'maintenance_check'
+  | 'taxi_to_hangar'
+  | 'in_hangar'
+  | 'boarding'
+  | 'ready_pushback'
   | 'pushback'
-  | 'taxiing'
+  | 'taxi_to_runway'
   | 'holding'
   | 'takeoff'
   | 'airborne'
   | 'cruising'
-  | 'approach'
-  | 'landing'
   | 'emergency';
 
 export interface Aircraft {
   id: string;              // e.g., "GIA123"
   x: number;
   y: number;
-  speed: number;           // pixels per frame (1.2 to 2.5) or knots
+  speed: number;           // knots / speed unit
   heading: number;         // 0-360 degrees
-  altitude: number;        // in feet, e.g. 0 - 8000
+  altitude: number;        // in feet
   fuel: number;            // 0-100%
-  waypoints: Waypoint[];   // Array of points from 'Draw Path'
+  waypoints: Waypoint[];
   status: AircraftStatus;
   
   // Tactical data & 3D Tower extensions
@@ -36,11 +45,16 @@ export interface Aircraft {
   history?: { x: number; y: number }[];
   conflictWith?: string[];
   landingProgress?: number;
-  gate?: string;            // e.g., "Stand 1", "Stand 2"
+  gate?: string;            // e.g., "Gate 1", "Gate 2", "Gate 3", "Hangar"
+  assignedGate?: 'Gate 1' | 'Gate 2' | 'Gate 3' | 'Hangar';
   destination?: string;     // e.g., "DPS / Bali", "SUB / Surabaya"
   pos3d?: { x: number; y: number; z: number };
   rot3d?: { pitch: number; yaw: number; roll: number };
-  phaseProgress?: number;   // 0 to 1 progress for pushback / taxiing animations
+  phaseProgress?: number;   // 0 to 1 progress for animations
+  serviceProgress?: number; // 0 to 100% for deboarding, cleaning, fueling, etc.
+  passengers?: { current: number; max: number };
+  technicalHealth?: number; // 0 to 100%
+  emergencyReason?: string; // e.g. "Kerusakan Mesin 1", "Bahan Bakar Kritis"
 }
 
 export interface Runway {
@@ -58,7 +72,7 @@ export interface Runway {
 export interface CommLogItem {
   id: string;
   timestamp: string;
-  sender: 'ATC' | 'PILOT' | 'SYSTEM';
+  sender: 'ATC' | 'PILOT' | 'SYSTEM' | 'GROUND_CREW';
   callsign?: string;
   message: string;
   type: 'info' | 'command' | 'ack' | 'alert';
@@ -66,6 +80,16 @@ export interface CommLogItem {
 
 export type ViewMode = 'tower' | 'binoculars' | 'follow' | 'radar2d';
 export type RadioChannel = 'approach' | 'tower' | 'ground' | 'clearance' | 'stand';
+export type WeatherCondition = 'Cerah' | 'Hujan Badai' | 'Kabut Tebal';
+
+export interface WeatherState {
+  condition: WeatherCondition;
+  temp: number;
+  wind: string;
+  rainIntensity: number;   // 0 (none) to 1 (heavy)
+  visibility: number;      // in meters
+  time: string;
+}
 
 export interface GameState {
   aircrafts: Aircraft[];
@@ -73,7 +97,7 @@ export interface GameState {
   landedCount: number;
   airMiles: number;
   airportLevel: number;
-  survivalTime: number;    // seconds survived
+  survivalTime: number;
   gameOver: boolean;
   gameOverReason?: string;
   collisionPoint: { x: number; y: number } | null;
@@ -84,17 +108,13 @@ export interface GameState {
   commsLog: CommLogItem[];
   micActive: boolean;
 
-  // 3D Tower & Roblox HUD state
+  // 3D Tower & Operations state
   viewMode: ViewMode;
   activeChannel: RadioChannel;
   tutorialText: string;
   tutorialActive: boolean;
-  weather: {
-    condition: string;
-    temp: number;
-    wind: string;
-    time: string;
-  };
+  weather: WeatherState;
+  emergencyServicesActive: boolean;
 
   // Actions
   addAircraft: (aircraft: Aircraft) => void;
@@ -112,13 +132,26 @@ export interface GameState {
   setMicActive: (active: boolean) => void;
   resetGame: () => void;
 
-  // Tower 3D Clearances & Commands (Roblox style)
+  // Real Turnaround & Ground Operations Clearances
+  assignDestination: (id: string, destination: 'Gate 1' | 'Gate 2' | 'Gate 3' | 'Hangar') => void;
+  startDeboarding: (id: string) => void;
+  startCabinService: (id: string) => void;
+  startRefueling: (id: string) => void;
+  startTechnicalCheck: (id: string) => void;
+  startBoarding: (id: string) => void;
   orderPushback: (id: string) => void;
   orderTaxi: (id: string) => void;
   orderTakeoff: (id: string) => void;
   orderHold: (id: string) => void;
   orderClearedToLand: (id: string) => void;
   orderGoAround: (id: string) => void;
+
+  // Emergency & Weather
+  triggerEmergency: (id?: string) => void;
+  dispatchEmergencyServices: (id: string) => void;
+  setWeatherCondition: (condition: WeatherCondition) => void;
+
+  // View & UI
   setViewMode: (mode: ViewMode) => void;
   setActiveChannel: (channel: RadioChannel) => void;
   dismissTutorial: () => void;
