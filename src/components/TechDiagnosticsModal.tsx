@@ -19,10 +19,15 @@ export const TechDiagnosticsModal: React.FC = () => {
   const isPendingVerdict = aircraft.pendingClearance === 'tech_verdict'
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 font-mono select-none animate-in fade-in duration-200">
-      <div className="bg-zinc-950 border border-zinc-700/80 rounded-xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden text-zinc-200">
-        {/* Header */}
-        <div className="px-5 py-3.5 bg-zinc-900 border-b border-zinc-800 flex items-center justify-between">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-3 md:p-6 font-mono select-none pointer-events-auto"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) close(null)
+      }}
+    >
+      <div className="bg-zinc-950 border border-zinc-700/80 rounded-xl shadow-2xl w-full max-w-4xl h-[88vh] max-h-[88vh] flex flex-col overflow-hidden text-zinc-200 pointer-events-auto">
+        {/* Header (Pinned) */}
+        <div className="px-5 py-3.5 bg-zinc-900 border-b border-zinc-800 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded bg-sky-950 border border-sky-600/50 text-sky-400">
               <FileText className="w-5 h-5" />
@@ -51,17 +56,22 @@ export const TechDiagnosticsModal: React.FC = () => {
           </button>
         </div>
 
-        {/* Notice for Player (Evaluation Guidance without Clues) */}
-        <div className="bg-sky-950/40 border-b border-sky-800/40 px-5 py-2.5 flex items-start gap-2.5 text-xs text-sky-200">
-          <AlertCircle className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
-          <div>
-            <span className="font-bold text-sky-300">INSTRUKSI PENGAWAS TOWER (ATC): </span>
-            Bandingkan nilai telemetri aktual setiap komponen terhadap nilai acuan standar operasi normal. Keputusan kelayakan lolos terbang atau rujuk ke hangar sepenuhnya merupakan wewenang dan penilaian mandiri Anda.
+        {/* Notice for Player (Pinned) */}
+        <div className="bg-sky-950/40 border-b border-sky-800/40 px-5 py-2.5 flex items-start justify-between gap-2.5 text-xs text-sky-200 shrink-0">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
+            <div>
+              <span className="font-bold text-sky-300">INSTRUKSI PENGAWAS TOWER (ATC): </span>
+              Bandingkan nilai telemetri aktual setiap komponen terhadap nilai acuan standar operasi normal. Keputusan kelayakan lolos terbang atau rujuk ke hangar sepenuhnya merupakan wewenang dan penilaian mandiri Anda.
+            </div>
           </div>
+          <span className="hidden sm:inline-flex items-center gap-1 text-[10px] text-sky-400 bg-sky-900/50 border border-sky-700/50 px-2 py-0.5 rounded whitespace-nowrap shrink-0">
+            ↕ Scroll untuk melihat seluruh data
+          </span>
         </div>
 
-        {/* Telemetry Metrics Body */}
-        <div className="p-5 overflow-y-auto space-y-4 text-xs scrollbar-thin">
+        {/* Telemetry Metrics Body (SCROLLABLE) */}
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-5 space-y-4 text-xs select-text telemetry-scroll-area">
           {/* Section 1: Hydraulic Systems */}
           <div className="bg-zinc-900/70 border border-zinc-800 rounded-lg p-3.5">
             <h3 className="text-[11px] font-bold uppercase text-sky-400 tracking-wider mb-2 flex items-center justify-between border-b border-zinc-800/80 pb-1.5">
@@ -220,8 +230,8 @@ export const TechDiagnosticsModal: React.FC = () => {
           </div>
         </div>
 
-        {/* Bottom Actions Bar */}
-        <div className="px-5 py-3.5 bg-zinc-900 border-t border-zinc-800 flex flex-wrap items-center justify-between gap-3">
+        {/* Bottom Actions Bar (Pinned) */}
+        <div className="px-5 py-3.5 bg-zinc-900 border-t border-zinc-800 flex flex-wrap items-center justify-between gap-3 shrink-0">
           <div className="text-[11px] text-zinc-400">
             Status Izin Saat Ini:{' '}
             <span className="font-bold text-amber-400 uppercase">

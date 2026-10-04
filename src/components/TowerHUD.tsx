@@ -23,7 +23,6 @@ import {
 import { useGameStore } from '../store/useGameStore'
 import { useVoiceCommand } from '../hooks/useVoiceCommand'
 import { radioSound } from '../utils/audioEffects'
-import { TechDiagnosticsModal } from './TechDiagnosticsModal'
 
 export const TowerHUD: React.FC = () => {
   const aircrafts = useGameStore((state) => state.aircrafts)
@@ -1197,9 +1196,6 @@ export const TowerHUD: React.FC = () => {
           </div>
         </div>
       </footer>
-
-      {/* Ground Crew Telemetry & Diagnostics Modal (No clues, player decides) */}
-      <TechDiagnosticsModal />
     </div>
   )
 }

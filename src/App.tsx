@@ -1,6 +1,7 @@
 import React from 'react'
 import { Tower3DView } from './components/Tower3DView'
 import { TowerHUD } from './components/TowerHUD'
+import { TechDiagnosticsModal } from './components/TechDiagnosticsModal'
 import { RadarCanvas } from './components/RadarCanvas'
 import { useGameLoop } from './hooks/useGameLoop'
 import { useGameStore } from './store/useGameStore'
@@ -23,7 +24,10 @@ export const App: React.FC = () => {
       {/* 2. Professional ATC Tower HUD Overlay (Frequencies, Clearances, Pilot Audio) */}
       <TowerHUD />
 
-      {/* 3. Optional 2D Approach Radar Modal */}
+      {/* 3. Pre-flight Telemetry Inspection Modal (Top-Level Dialog) */}
+      <TechDiagnosticsModal />
+
+      {/* 4. Optional 2D Approach Radar Modal */}
       {viewMode === 'radar2d' && (
         <div className="absolute top-16 left-4 z-40 w-[480px] h-[480px] bg-[#05080e]/95 border-2 border-cyan-400 rounded-xl overflow-hidden shadow-[0_8px_32px_rgba(0,0,0,0.85)] flex flex-col pointer-events-auto backdrop-blur-md animate-fade-in font-mono">
           <div className="flex items-center justify-between px-3 py-1.5 bg-[#091522] border-b border-cyan-500/40 text-xs text-cyan-300">

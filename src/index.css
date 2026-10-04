@@ -92,3 +92,28 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #00ffaa66;
 }
+
+/* High-visibility scrollbar for Telemetry Diagnostics Modal */
+.telemetry-scroll-area {
+  scrollbar-width: thin;
+  scrollbar-color: #0284c7 #18181b;
+}
+
+.telemetry-scroll-area::-webkit-scrollbar {
+  width: 10px;
+}
+
+.telemetry-scroll-area::-webkit-scrollbar-track {
+  background: #18181b;
+  border-radius: 6px;
+}
+
+.telemetry-scroll-area::-webkit-scrollbar-thumb {
+  background: #0284c7;
+  border-radius: 6px;
+  border: 2px solid #18181b;
+}
+
+.telemetry-scroll-area::-webkit-scrollbar-thumb:hover {
+  background: #38bdf8;
+}
