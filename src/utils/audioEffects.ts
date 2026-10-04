@@ -2,6 +2,13 @@
  * Synthetic VHF radio sound & ATC simulation sound effects using Web Audio API
  */
 
+export type RadioRole = 'ATC' | 'PILOT'
+
+export interface QueuedTransmission {
+  role: RadioRole
+  text: string
+}
+
 class RadioSoundFX {
   private ctx: AudioContext | null = null
   private carrierGainNode: GainNode | null = null
@@ -11,9 +18,49 @@ class RadioSoundFX {
   private isTransmitting = false
   private carrierTimeout: ReturnType<typeof setTimeout> | null = null
 
-  // FIFO Radio Transmission Queue: Ensures ongoing pilot transmissions complete without being cut off
-  private speechQueue: string[] = []
+  // FIFO Radio Transmission Queue: Ensures ATC and Pilot transmissions never cut each other off
+  private speechQueue: QueuedTransmission[] = []
   private isSpeaking = false
+  private currentSpeaker: RadioRole | null = null
+  private currentTransmittingText = ''
+  private speakerSubscribers: Set<(speaker: RadioRole | null, text: string) => void> = new Set()
+
+  constructor() {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.onvoiceschanged = () => {
+        window.speechSynthesis.getVoices()
+      }
+    }
+  }
+
+  /**
+   * Subscribe to real-time active radio speaker events ('ATC' | 'PILOT' | null)
+   */
+  subscribeSpeaker(callback: (speaker: RadioRole | null, text: string) => void): () => void {
+    this.speakerSubscribers.add(callback)
+    callback(this.currentSpeaker, this.currentTransmittingText)
+    return () => {
+      this.speakerSubscribers.delete(callback)
+    }
+  }
+
+  private notifySpeakerSubscribers() {
+    this.speakerSubscribers.forEach((cb) => {
+      try {
+        cb(this.currentSpeaker, this.currentTransmittingText)
+      } catch {
+        // Ignore subscriber errors
+      }
+    })
+  }
+
+  getCurrentSpeaker(): RadioRole | null {
+    return this.currentSpeaker
+  }
+
+  getCurrentText(): string {
+    return this.currentTransmittingText
+  }
 
   private getContext(): AudioContext | null {
     if (typeof window === 'undefined') return null
@@ -32,10 +79,11 @@ class RadioSoundFX {
   }
 
   /**
-   * Continuous VHF Radio Carrier Hiss + 400Hz Cockpit Alternator Hum Bed
-   * Recreates the authentic live airband background during pilot/ATC transmissions
+   * Continuous VHF Radio Carrier Hiss Bed
+   * isCockpit = true adds the 400Hz cockpit alternator whine + 110Hz jet drone.
+   * isCockpit = false produces the cleaner ground tower ATC headset sidetone.
    */
-  startRadioCarrier() {
+  startRadioCarrier(isCockpit = true) {
     try {
       const ctx = this.getContext()
       if (!ctx || this.isTransmitting) return
@@ -44,7 +92,7 @@ class RadioSoundFX {
       // Master carrier gain with quick fade-in
       const masterGain = ctx.createGain()
       masterGain.gain.setValueAtTime(0.001, ctx.currentTime)
-      masterGain.gain.exponentialRampToValueAtTime(0.045, ctx.currentTime + 0.04)
+      masterGain.gain.exponentialRampToValueAtTime(isCockpit ? 0.045 : 0.025, ctx.currentTime + 0.04)
 
       // 1. Airband VHF White/Pink Noise (Bandpass filtered 350Hz - 2900Hz)
       const bufferSize = ctx.sampleRate * 2
@@ -65,8 +113,8 @@ class RadioSoundFX {
 
       const bandpass = ctx.createBiquadFilter()
       bandpass.type = 'bandpass'
-      bandpass.frequency.setValueAtTime(1450, ctx.currentTime)
-      bandpass.Q.setValueAtTime(1.2, ctx.currentTime)
+      bandpass.frequency.setValueAtTime(isCockpit ? 1450 : 1600, ctx.currentTime)
+      bandpass.Q.setValueAtTime(isCockpit ? 1.2 : 1.4, ctx.currentTime)
 
       const highCut = ctx.createBiquadFilter()
       highCut.type = 'highshelf'
@@ -79,27 +127,29 @@ class RadioSoundFX {
       noise.start()
       this.carrierNoiseNode = noise
 
-      // 2. Cockpit 400Hz Electrical Alternator Bus Whine (Cockpit headset signature)
-      const oscWhine = ctx.createOscillator()
-      const oscWhineGain = ctx.createGain()
-      oscWhine.type = 'sine'
-      oscWhine.frequency.setValueAtTime(400, ctx.currentTime)
-      oscWhineGain.gain.setValueAtTime(0.007, ctx.currentTime)
-      oscWhine.connect(oscWhineGain)
-      oscWhineGain.connect(masterGain)
-      oscWhine.start()
-      this.carrierOsc1 = oscWhine
+      if (isCockpit) {
+        // 2. Cockpit 400Hz Electrical Alternator Bus Whine (Cockpit headset signature)
+        const oscWhine = ctx.createOscillator()
+        const oscWhineGain = ctx.createGain()
+        oscWhine.type = 'sine'
+        oscWhine.frequency.setValueAtTime(400, ctx.currentTime)
+        oscWhineGain.gain.setValueAtTime(0.007, ctx.currentTime)
+        oscWhine.connect(oscWhineGain)
+        oscWhineGain.connect(masterGain)
+        oscWhine.start()
+        this.carrierOsc1 = oscWhine
 
-      // 3. Cockpit Jet Turbine Low-Frequency Drone (110Hz)
-      const oscDrone = ctx.createOscillator()
-      const oscDroneGain = ctx.createGain()
-      oscDrone.type = 'triangle'
-      oscDrone.frequency.setValueAtTime(110, ctx.currentTime)
-      oscDroneGain.gain.setValueAtTime(0.012, ctx.currentTime)
-      oscDrone.connect(oscDroneGain)
-      oscDroneGain.connect(masterGain)
-      oscDrone.start()
-      this.carrierOsc2 = oscDrone
+        // 3. Cockpit Jet Turbine Low-Frequency Drone (110Hz)
+        const oscDrone = ctx.createOscillator()
+        const oscDroneGain = ctx.createGain()
+        oscDrone.type = 'triangle'
+        oscDrone.frequency.setValueAtTime(110, ctx.currentTime)
+        oscDroneGain.gain.setValueAtTime(0.012, ctx.currentTime)
+        oscDrone.connect(oscDroneGain)
+        oscDroneGain.connect(masterGain)
+        oscDrone.start()
+        this.carrierOsc2 = oscDrone
+      }
 
       masterGain.connect(ctx.destination)
       this.carrierGainNode = masterGain
@@ -382,28 +432,40 @@ class RadioSoundFX {
   }
 
   /**
-   * Enqueue pilot speech readback into the FIFO transmission queue.
-   * Ensures the current pilot completes their sentence before the next transmission starts.
+   * Enqueue ATC tower instruction (Female Voice) into the FIFO radio queue.
+   */
+  speakAtcVoice(text: string) {
+    this.enqueueTransmission('ATC', text)
+  }
+
+  /**
+   * Enqueue pilot speech readback (Male Voice) into the FIFO radio queue.
    */
   speakPilotVoice(text: string) {
+    this.enqueueTransmission('PILOT', text)
+  }
+
+  private enqueueTransmission(role: RadioRole, text: string) {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) return
     if (!text || text.trim().length === 0) return
 
     const trimmed = text.trim()
 
-    // Prevent duplicate consecutive transmissions in queue
-    if (this.speechQueue.includes(trimmed)) return
+    // Prevent duplicate identical transmissions in queue
+    if (this.speechQueue.some((item) => item.role === role && item.text === trimmed)) return
 
-    // Cap queue to max 4 transmissions to keep radio timely
-    if (this.speechQueue.length >= 4) {
+    // Cap queue to max 6 transmissions to keep radio timely
+    if (this.speechQueue.length >= 6) {
       this.speechQueue.shift()
     }
 
+    const item: QueuedTransmission = { role, text: trimmed }
+
     // Emergency transmissions jump to the front of the waiting queue
     if (trimmed.includes('MAYDAY') || trimmed.includes('emergency')) {
-      this.speechQueue.unshift(trimmed)
+      this.speechQueue.unshift(item)
     } else {
-      this.speechQueue.push(trimmed)
+      this.speechQueue.push(item)
     }
 
     if (!this.isSpeaking) {
@@ -412,16 +474,92 @@ class RadioSoundFX {
   }
 
   /**
+   * Select authentic female English voice for ATC Tower Controller
+   */
+  private getAtcVoice(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | undefined {
+    if (!voices || voices.length === 0) return undefined
+
+    // 1. Common female voices on Windows (Zira, Jenny, Aria), macOS/iOS (Samantha, Victoria), and standard web
+    const femaleKeywords = [
+      'zira',
+      'jenny',
+      'aria',
+      'hazel',
+      'samantha',
+      'victoria',
+      'karen',
+      'female',
+      'susan',
+      'moira',
+      'sonia',
+      'libby',
+      'ana',
+      'eva',
+    ]
+    const foundFemale = voices.find((v) => {
+      if (!v.lang.startsWith('en')) return false
+      const name = v.name.toLowerCase()
+      return femaleKeywords.some((kw) => name.includes(kw))
+    })
+    if (foundFemale) return foundFemale
+
+    // 2. Google US English (female default in Chromium on Windows/Linux)
+    const googleVoice = voices.find(
+      (v) =>
+        v.lang.startsWith('en') &&
+        v.name.includes('Google') &&
+        !v.name.toLowerCase().includes('male')
+    )
+    if (googleVoice) return googleVoice
+
+    // 3. Any English voice that does not match known male names
+    const maleKeywords = ['david', 'mark', 'george', 'guy', 'male', 'richard', 'james', 'john', 'ryan', 'stefan']
+    const nonMale = voices.find((v) => {
+      if (!v.lang.startsWith('en')) return false
+      const name = v.name.toLowerCase()
+      return !maleKeywords.some((kw) => name.includes(kw))
+    })
+    if (nonMale) return nonMale
+
+    return voices.find((v) => v.lang.startsWith('en-US')) || voices.find((v) => v.lang.startsWith('en'))
+  }
+
+  /**
+   * Select authentic male English voice for Airline Captain
+   */
+  private getPilotVoice(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | undefined {
+    if (!voices || voices.length === 0) return undefined
+
+    const maleKeywords = ['david', 'mark', 'george', 'guy', 'male', 'richard', 'james', 'john', 'ryan', 'stefan']
+    const foundMale = voices.find((v) => {
+      if (!v.lang.startsWith('en')) return false
+      const name = v.name.toLowerCase()
+      return maleKeywords.some((kw) => name.includes(kw))
+    })
+    if (foundMale) return foundMale
+
+    return voices.find((v) => v.lang.startsWith('en-US')) || voices.find((v) => v.lang.startsWith('en'))
+  }
+
+  /**
    * Process the next radio transmission in the FIFO queue
    */
   private processNextTransmission() {
     if (this.speechQueue.length === 0) {
       this.isSpeaking = false
+      this.currentSpeaker = null
+      this.currentTransmittingText = ''
+      this.notifySpeakerSubscribers()
       return
     }
 
     this.isSpeaking = true
-    const text = this.speechQueue.shift()!
+    const item = this.speechQueue.shift()!
+    const { role, text } = item
+
+    this.currentSpeaker = role
+    this.currentTransmittingText = text
+    this.notifySpeakerSubscribers()
 
     try {
       this.stopRadioCarrier()
@@ -429,42 +567,41 @@ class RadioSoundFX {
       // 1. Play opening radio "TUT-TUT" PTT key-in tone
       this.playRadioTutTut(false)
 
-      // 2. Start continuous VHF carrier hiss bed with cockpit alternator whine
+      // 2. Start continuous VHF carrier bed (tower sidetone for ATC, cockpit whine for Pilot)
       setTimeout(() => {
         if (this.isSpeaking) {
-          this.startRadioCarrier()
+          this.startRadioCarrier(role === 'PILOT')
         }
       }, 70)
 
       const spokenText = this.formatRadioPhonetics(text)
       const utterance = new SpeechSynthesisUtterance(spokenText)
 
-      // Authentic English Aviation Radio speech parameters:
-      utterance.lang = 'en-US'
-      utterance.pitch = 0.82
-      utterance.rate = 1.15
       utterance.volume = 1.0
-
-      // Select male English pilot voice for authentic captain cadence
       const voices = window.speechSynthesis.getVoices()
-      const cockpitVoice =
-        voices.find(
-          (v) =>
-            v.lang.startsWith('en') &&
-            (v.name.includes('David') ||
-              v.name.includes('Mark') ||
-              v.name.includes('George') ||
-              v.name.includes('Natural') ||
-              v.name.includes('Guy') ||
-              v.name.includes('Male') ||
-              v.name.includes('Google US English'))
-        ) ||
-        voices.find((v) => v.lang.startsWith('en-US')) ||
-        voices.find((v) => v.lang.startsWith('en'))
 
-      if (cockpitVoice) {
-        utterance.voice = cockpitVoice
+      if (role === 'ATC') {
+        // ATC Tower Controller: Professional, crisp, higher pitch female voice
         utterance.lang = 'en-US'
+        utterance.pitch = 1.08
+        utterance.rate = 1.16
+
+        const atcVoice = this.getAtcVoice(voices)
+        if (atcVoice) {
+          utterance.voice = atcVoice
+          utterance.lang = atcVoice.lang || 'en-US'
+        }
+      } else {
+        // Pilot Captain: Authoritative, steady, deeper male voice
+        utterance.lang = 'en-US'
+        utterance.pitch = 0.82
+        utterance.rate = 1.12
+
+        const pilotVoice = this.getPilotVoice(voices)
+        if (pilotVoice) {
+          utterance.voice = pilotVoice
+          utterance.lang = pilotVoice.lang || 'en-US'
+        }
       }
 
       let isCompleted = false
@@ -476,7 +613,12 @@ class RadioSoundFX {
         // Play trailing radio "TUT-TUT" roger release chirp
         setTimeout(() => this.playRadioTutTut(true), 20)
 
-        // Natural radio gap pause (350ms dead air) before allowing the next aircraft to transmit!
+        // Clear active speaker after audio stops
+        this.currentSpeaker = null
+        this.currentTransmittingText = ''
+        this.notifySpeakerSubscribers()
+
+        // Natural radio gap pause (350ms dead air) before allowing the next speaker to transmit!
         setTimeout(() => {
           this.isSpeaking = false
           this.processNextTransmission()
@@ -488,6 +630,9 @@ class RadioSoundFX {
         if (isCompleted) return
         isCompleted = true
         this.stopRadioCarrier()
+        this.currentSpeaker = null
+        this.currentTransmittingText = ''
+        this.notifySpeakerSubscribers()
         setTimeout(() => {
           this.isSpeaking = false
           this.processNextTransmission()
@@ -511,6 +656,9 @@ class RadioSoundFX {
     } catch {
       this.stopRadioCarrier()
       this.isSpeaking = false
+      this.currentSpeaker = null
+      this.currentTransmittingText = ''
+      this.notifySpeakerSubscribers()
       setTimeout(() => this.processNextTransmission(), 200)
     }
   }

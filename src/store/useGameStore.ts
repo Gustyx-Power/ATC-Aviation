@@ -171,7 +171,11 @@ export const getInitialAircrafts = (
 
 let frameCounter = 0
 
-// Pilot & Crew Voice readback helper using Web Audio API + Speech Synthesis
+// ATC Controller (Female Voice) & Pilot/Crew (Male Voice) Voice transmission helpers
+function atcInstruction(text: string) {
+  radioSound.speakAtcVoice(text)
+}
+
 function pilotReadback(text: string) {
   radioSound.speakPilotVoice(text)
 }
@@ -267,6 +271,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (ac.status === 'approach' || ac.pendingClearance === 'landing') {
       get().orderHoldInAir(id)
     } else {
+      atcInstruction(`${id}, negative clearance at this time, maintain current position.`)
       pilotReadback(`${id}, clearance denied by ATC, holding position, standing by.`)
       set((s) => ({
         commsLog: [
@@ -365,6 +370,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       message: `Taxiing to ${destination} via Alpha, ${id}.`,
       type: 'ack',
     }
+    atcInstruction(`${id}, taxi via Alpha to ${destination}.`)
     pilotReadback(`Taxiing to ${destination} via Alpha, ${id}, roger.`)
 
     set((state) => ({
@@ -389,6 +395,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   startDeboarding: (id: string) => {
     radioSound.playRogerBeep()
+    atcInstruction(`${id}, deboarding clearance approved, connect passenger jetway.`)
     pilotReadback(`${id}, jetway connected, commencing passenger deboarding.`)
 
     set((state) => ({
@@ -397,6 +404,14 @@ export const useGameStore = create<GameState>((set, get) => ({
       ),
       commsLog: [
         ...state.commsLog,
+        {
+          id: `cmd-deb-${Date.now()}`,
+          timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
+          sender: 'ATC' as const,
+          callsign: id,
+          message: `${id}, deboarding approved, connect jetway.`,
+          type: 'command' as const,
+        },
         {
           id: `deb-${Date.now()}`,
           timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
@@ -412,6 +427,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   startCabinService: (id: string) => {
     radioSound.playRogerBeep()
+    atcInstruction(`${id}, cabin turnaround service approved.`)
     pilotReadback(`${id}, cleaning crew on board, cabin turnaround underway.`)
 
     set((state) => ({
@@ -420,6 +436,14 @@ export const useGameStore = create<GameState>((set, get) => ({
       ),
       commsLog: [
         ...state.commsLog,
+        {
+          id: `cmd-clean-${Date.now()}`,
+          timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
+          sender: 'ATC' as const,
+          callsign: id,
+          message: `${id}, cabin service approved.`,
+          type: 'command' as const,
+        },
         {
           id: `clean-${Date.now()}`,
           timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
@@ -435,6 +459,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   startRefueling: (id: string) => {
     radioSound.playRogerBeep()
+    atcInstruction(`${id}, refueling approved, fuel truck cleared to connect.`)
     pilotReadback(`${id}, fuel truck connected, fueling in progress.`)
 
     set((state) => ({
@@ -443,6 +468,14 @@ export const useGameStore = create<GameState>((set, get) => ({
       ),
       commsLog: [
         ...state.commsLog,
+        {
+          id: `cmd-fuel-${Date.now()}`,
+          timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
+          sender: 'ATC' as const,
+          callsign: id,
+          message: `${id}, refueling approved.`,
+          type: 'command' as const,
+        },
         {
           id: `fuel-${Date.now()}`,
           timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
@@ -458,6 +491,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   startTechnicalCheck: (id: string) => {
     radioSound.playRogerBeep()
+    atcInstruction(`${id}, maintenance walkaround inspection approved.`)
     pilotReadback(`${id}, ground engineers conducting pre-flight inspection and maintenance checks.`)
 
     set((state) => ({
@@ -466,6 +500,14 @@ export const useGameStore = create<GameState>((set, get) => ({
       ),
       commsLog: [
         ...state.commsLog,
+        {
+          id: `cmd-tech-${Date.now()}`,
+          timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
+          sender: 'ATC' as const,
+          callsign: id,
+          message: `${id}, maintenance inspection approved.`,
+          type: 'command' as const,
+        },
         {
           id: `tech-${Date.now()}`,
           timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
@@ -481,6 +523,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   startBoarding: (id: string) => {
     radioSound.playRogerBeep()
+    atcInstruction(`${id}, passenger boarding approved.`)
     pilotReadback(`${id}, boarding passengers, preparing for departure.`)
 
     set((state) => ({
@@ -489,6 +532,14 @@ export const useGameStore = create<GameState>((set, get) => ({
       ),
       commsLog: [
         ...state.commsLog,
+        {
+          id: `cmd-board-${Date.now()}`,
+          timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
+          sender: 'ATC' as const,
+          callsign: id,
+          message: `${id}, passenger boarding approved.`,
+          type: 'command' as const,
+        },
         {
           id: `board-${Date.now()}`,
           timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
@@ -520,6 +571,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       message: `Pushback approved, facing west, ${id}.`,
       type: 'ack',
     }
+    atcInstruction(`${id}, pushback approved, face west onto Taxiway Alpha.`)
     pilotReadback(`Pushback approved, facing west onto Alpha, ${id}.`)
 
     set((state) => ({
@@ -550,6 +602,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       message: `Taxi to holding point Runway 09 via Alpha, ${id}.`,
       type: 'ack',
     }
+    atcInstruction(`${id}, taxi to holding point Runway 09 via Taxiway Alpha.`)
     pilotReadback(`Taxi to holding point Runway 09 via Alpha, ${id}.`)
 
     set((state) => ({
@@ -587,6 +640,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       message: `Cleared for takeoff Runway 09, ${id}, rolling!`,
       type: 'ack',
     }
+    atcInstruction(`${id}, wind 270 at 05 knots, Runway 09 cleared for takeoff!`)
     pilotReadback(`Cleared for takeoff Runway 09, ${id}, rolling!`)
 
     set((state) => ({
@@ -627,6 +681,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       message: `Holding position, ${id}.`,
       type: 'ack',
     }
+    atcInstruction(`${id}, hold position immediately.`)
     pilotReadback(`Holding position, ${id}.`)
 
     set((state) => ({
@@ -655,6 +710,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       message: `Cleared to land Runway 09, ${id}.`,
       type: 'ack',
     }
+    atcInstruction(`${id}, wind 270 at 05 knots, Runway 09 cleared to land.`)
     pilotReadback(`Cleared to land Runway 09, ${id}, roger.`)
 
     set((state) => ({
@@ -697,6 +753,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       message: `Aborting approach, climbing to FL035 holding pattern, ${id}.`,
       type: 'ack',
     }
+    atcInstruction(`${id}, abort approach, climb and maintain FL035, enter holding pattern.`)
     pilotReadback(`Aborting approach, climbing to FL035, entering holding pattern, ${id}.`)
 
     set((state) => ({
@@ -739,6 +796,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       message: `Leaving holding, heading 090, cleared to land Runway 09, ${id}.`,
       type: 'ack',
     }
+    atcInstruction(`${id}, leave holding pattern, turn heading 090, intercept localizer, Runway 09 cleared to land.`)
     pilotReadback(`Leaving holding, heading 090, intercepting Runway 09, cleared to land, ${id}.`)
 
     set((state) => ({
@@ -765,6 +823,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   startEngineOverhaul: (id: string) => {
     radioSound.playRogerBeep()
+    atcInstruction(`${id}, engine overhaul approved in Hangar 1.`)
     pilotReadback(`${id}, hangar maintenance commencing turbofan engine overhaul.`)
 
     set((state) => ({
@@ -788,6 +847,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   startAvionicsCheck: (id: string) => {
     radioSound.playRogerBeep()
+    atcInstruction(`${id}, avionics inspection approved in Hangar 2.`)
     pilotReadback(`${id}, calibrating avionics, transponder, and flight guidance systems.`)
 
     set((state) => ({
@@ -811,6 +871,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   startCCheck: (id: string) => {
     radioSound.playRogerBeep()
+    atcInstruction(`${id}, heavy C-Check inspection approved in hangar.`)
     pilotReadback(`${id}, commencing heavy C-Check structural and hydraulic inspection.`)
 
     set((state) => ({
@@ -835,6 +896,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   releaseFromHangar: (id: string, targetGate?: 'Gate 1' | 'Gate 2' | 'Gate 3' | 'Gate 4' | 'Gate 5' | 'Gate 6') => {
     radioSound.playRogerBeep()
     const gate = targetGate || 'Gate 3'
+    atcInstruction(`${id}, hangar release approved, taxi via Alpha to ${gate}.`)
     pilotReadback(`${id}, hangar service complete, aircraft airworthy, taxiing to ${gate}.`)
 
     set((state) => ({
@@ -890,6 +952,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       message: `Going around, climb 2500ft, ${id}.`,
       type: 'ack',
     }
+    atcInstruction(`${id}, go around immediately, climb 2500ft.`)
     pilotReadback(`Going around, climbing to 2,500 feet, ${id}.`)
 
     set((state) => ({
@@ -948,6 +1011,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   dispatchEmergencyServices: (id: string) => {
     radioSound.playRogerBeep()
+    atcInstruction(`${id}, emergency ARFF fire rescue deployed and on standby along Runway 09.`)
     pilotReadback(`Airport ARFF fire tenders standing by along Runway 09 for ${id}.`)
 
     set((state) => ({

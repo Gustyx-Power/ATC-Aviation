@@ -113,6 +113,14 @@ export const TowerHUD: React.FC = () => {
     (focusedAircraft?.pendingClearance ? focusedAircraft : null) ||
     aircrafts.find((a) => a.pendingClearance)
 
+  // Active Radio Speaker ('ATC' | 'PILOT' | null) subscribed live from Web Audio / Speech Engine
+  const [activeRadioSpeaker, setActiveRadioSpeaker] = useState<'ATC' | 'PILOT' | null>(null)
+  useEffect(() => {
+    return radioSound.subscribeSpeaker((speaker) => {
+      setActiveRadioSpeaker(speaker)
+    })
+  }, [])
+
   // 2-Way Live Radio Dialogue: extract latest ATC and Pilot transmissions
   const reversedComms = [...commsLog].reverse()
   const latestAtcMsg = reversedComms.find((m) => m.sender === 'ATC')
@@ -120,9 +128,10 @@ export const TowerHUD: React.FC = () => {
     reversedComms.find((m) => m.sender === 'PILOT' || m.sender === 'GROUND_CREW') ||
     commsLog[commsLog.length - 1]
   const lastMsg = commsLog[commsLog.length - 1]
-  const isAtcSpeaking = lastMsg?.sender === 'ATC'
+  const isAtcSpeaking = activeRadioSpeaker === 'ATC' || (!activeRadioSpeaker && lastMsg?.sender === 'ATC')
   const isPilotSpeaking =
-    lastMsg?.sender === 'PILOT' || lastMsg?.sender === 'GROUND_CREW' || Boolean(activePendingAircraft)
+    activeRadioSpeaker === 'PILOT' ||
+    (!activeRadioSpeaker && (lastMsg?.sender === 'PILOT' || lastMsg?.sender === 'GROUND_CREW' || Boolean(activePendingAircraft)))
 
   return (
     <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-3 select-none overflow-hidden font-sans text-zinc-100">
@@ -577,13 +586,23 @@ export const TowerHUD: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-2">
+              {latestAtcMsg && (
+                <button
+                  onClick={() => radioSound.speakAtcVoice(latestAtcMsg.message)}
+                  className="px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 font-mono text-[10px] font-bold cursor-pointer transition-all flex items-center gap-1"
+                  title="Dengarkan Kembali Transmisi Suara ATC (Perempuan)"
+                >
+                  <Volume2 className="w-3.5 h-3.5 text-sky-400" />
+                  <span>REPLAY ATC</span>
+                </button>
+              )}
               {latestPilotMsg && (
                 <button
                   onClick={() => radioSound.speakPilotVoice(latestPilotMsg.message)}
                   className="px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 font-mono text-[10px] font-bold cursor-pointer transition-all flex items-center gap-1"
-                  title="Dengarkan Kembali Transmisi Radio Pilot"
+                  title="Dengarkan Kembali Transmisi Radio Pilot (Laki-laki)"
                 >
-                  <Volume2 className="w-3.5 h-3.5 text-sky-400" />
+                  <Volume2 className="w-3.5 h-3.5 text-emerald-400" />
                   <span>REPLAY PILOT</span>
                 </button>
               )}

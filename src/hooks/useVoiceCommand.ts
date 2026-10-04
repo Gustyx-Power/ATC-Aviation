@@ -41,35 +41,9 @@ export const useVoiceCommand = () => {
   const isListeningRef = useRef<boolean>(false)
 
 
-  // Pilot Voice Readback via SpeechSynthesis
+  // Pilot Voice Readback via authentic VHF Radio Sound Engine
   const speakPilotReadback = useCallback((text: string) => {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return
-
-    try {
-      window.speechSynthesis.cancel() // Stop any current speech
-
-      const utterance = new SpeechSynthesisUtterance(text)
-      utterance.rate = 1.05
-      utterance.pitch = 0.95 // Slightly deeper pilot cockpit radio pitch
-
-      // Pick an English or system voice if available
-      const voices = window.speechSynthesis.getVoices()
-      const radioVoice = voices.find(
-        (v) => v.lang.startsWith('en') && (v.name.includes('Male') || v.name.includes('David') || v.name.includes('Google'))
-      ) || voices[0]
-
-      if (radioVoice) {
-        utterance.voice = radioVoice
-      }
-
-      utterance.onstart = () => {
-        radioSound.playRogerBeep()
-      }
-
-      window.speechSynthesis.speak(utterance)
-    } catch {
-      // Ignore synthesis errors
-    }
+    radioSound.speakPilotVoice(text)
   }, [])
 
   // Execute a parsed voice command
