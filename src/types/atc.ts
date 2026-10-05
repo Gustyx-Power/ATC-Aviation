@@ -96,7 +96,11 @@ export interface AircraftTechReport {
   primaryDefect?: TechAnomalyCategory;
   secondaryDefect?: TechAnomalyCategory;
   defectReason?: string;
+  defectReasonEn?: string;
+  defectReasonId?: string;
   secondaryDefectReason?: string;
+  secondaryDefectReasonEn?: string;
+  secondaryDefectReasonId?: string;
 }
 
 export interface Aircraft {
@@ -159,9 +163,14 @@ export interface Aircraft {
   hangarDiagnosisResult?: {
     verdict: 'perfect' | 'partial' | 'wrong';
     suspectedLabel: string;
+    suspectedLabelEn?: string;
     actualReason: string;
+    actualReasonEn?: string;
     secondaryReason?: string;
+    secondaryReasonEn?: string;
     message: string;
+    messageEn?: string;
+    messageId?: string;
     scoreChange: number;
     airMilesChange: number;
   };
@@ -185,6 +194,8 @@ export interface CommLogItem {
   sender: 'ATC' | 'PILOT' | 'SYSTEM' | 'GROUND_CREW';
   callsign?: string;
   message: string;
+  messageEn?: string;
+  messageId?: string;
   type: 'info' | 'command' | 'ack' | 'alert';
 }
 
@@ -284,6 +295,8 @@ export interface GameState {
   resolveTechVerdict: (id: string, decision: 'airworthy' | 'hangar', suspectedAnomaly?: TechAnomalyCategory) => void;
 
   // View & UI
+  language: 'id' | 'en';
+  setLanguage: (lang: 'id' | 'en') => void;
   setViewMode: (mode: ViewMode) => void;
   setActiveChannel: (channel: RadioChannel) => void;
   dismissTutorial: () => void;

@@ -19,6 +19,9 @@ import {
   Check,
   X,
   FileText,
+  AlertTriangle,
+  ArrowRight,
+  Languages,
 } from 'lucide-react'
 import { useGameStore } from '../store/useGameStore'
 import { useVoiceCommand } from '../hooks/useVoiceCommand'
@@ -48,6 +51,9 @@ export const TowerHUD: React.FC = () => {
   const spawnAircraft = useGameStore((state) => state.spawnAircraft)
   const weather = useGameStore((state) => state.weather)
   const commsLog = useGameStore((state) => state.commsLog)
+  const language = useGameStore((state) => state.language)
+  const setLanguage = useGameStore((state) => state.setLanguage)
+  const isId = language === 'id'
 
   const orderClearedToLand = useGameStore((state) => state.orderClearedToLand)
   const orderExitHolding = useGameStore((state) => state.orderExitHolding)
@@ -274,10 +280,22 @@ export const TowerHUD: React.FC = () => {
           <button
             onClick={spawnAircraft}
             className="px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 font-mono text-xs font-bold cursor-pointer transition-all flex items-center gap-1"
-            title="Panggil Pesawat Inbound Tambahan"
+            title={isId ? 'Panggil Pesawat Inbound Tambahan' : 'Spawn Additional Inbound Aircraft'}
           >
             <Plane className="w-3.5 h-3.5 rotate-45 text-sky-400" />
             <span>+ INBOUND</span>
+          </button>
+
+          {/* Language Switcher [ID / EN] */}
+          <button
+            onClick={() => setLanguage(isId ? 'en' : 'id')}
+            className="px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 font-mono text-xs font-bold cursor-pointer transition-all flex items-center gap-1.5 shadow-sm"
+            title={isId ? 'Beralih ke Bahasa Inggris (Switch to English)' : 'Switch to Indonesian (Beralih ke Bahasa Indonesia)'}
+          >
+            <Languages className="w-3.5 h-3.5 text-sky-400" />
+            <span className={isId ? 'text-amber-400 font-black' : 'text-zinc-500'}>ID</span>
+            <span className="text-zinc-600">/</span>
+            <span className={!isId ? 'text-sky-400 font-black' : 'text-zinc-500'}>EN</span>
           </button>
         </div>
       </header>
@@ -373,8 +391,9 @@ export const TowerHUD: React.FC = () => {
                         </div>
                       ) : ac.status === 'approach' && !ac.isClearedToLand ? (
                         <div className="mt-2 pt-1.5 border-t border-zinc-800/80 flex items-center justify-between gap-1">
-                          <span className="text-[9px] text-amber-400 font-semibold animate-pulse">
-                            ⚠️ Belum Ada Izin Mendarat
+                          <span className="text-[9px] text-amber-400 font-semibold animate-pulse flex items-center gap-1">
+                            <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />
+                            <span>{isId ? 'Belum Ada Izin Mendarat' : 'Awaiting Landing Clearance'}</span>
                           </span>
                           <button
                             onClick={(e) => {
@@ -383,7 +402,7 @@ export const TowerHUD: React.FC = () => {
                             }}
                             className="px-2 py-1 rounded bg-sky-600 hover:bg-sky-500 text-white text-[10px] font-bold cursor-pointer transition-all"
                           >
-                            Izin Mendarat
+                            {isId ? 'Izin Mendarat' : 'Clear to Land'}
                           </button>
                         </div>
                       ) : null}
@@ -412,7 +431,7 @@ export const TowerHUD: React.FC = () => {
                   : 'bg-zinc-800 text-emerald-400'
               }`}
             >
-              {allGatesOccupied ? 'PENUH' : `${occupiedGatesCount}/6`}
+              {allGatesOccupied ? (isId ? 'PENUH' : 'FULL') : `${occupiedGatesCount}/6`}
             </span>
           </div>
 
@@ -436,7 +455,10 @@ export const TowerHUD: React.FC = () => {
                       className="flex items-center justify-between p-2 rounded bg-zinc-900/40 border border-zinc-850 text-zinc-500 text-[10px]"
                     >
                       <span className="font-bold text-zinc-400">{gateName}</span>
-                      <span className="text-emerald-500/80 font-mono">🟢 KOSONG (STANDBY)</span>
+                      <div className="flex items-center gap-1.5 text-emerald-500/80 font-mono">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500/80" />
+                        <span>{isId ? 'KOSONG (STANDBY)' : 'EMPTY (STANDBY)'}</span>
+                      </div>
                     </div>
                   )
                 }
@@ -456,7 +478,7 @@ export const TowerHUD: React.FC = () => {
                       hasPending
                         ? 'bg-amber-950/30 border-amber-500/80 text-amber-200'
                         : isFocused
-                        ? 'bg-zinc-850 border-sky-500 text-zinc-100 shadow-md'
+                        ? 'bg-zinc-855 border-sky-500 text-zinc-100 shadow-md'
                         : 'bg-zinc-900/80 hover:bg-zinc-850 border-zinc-800 text-zinc-300'
                     }`}
                   >
@@ -484,7 +506,7 @@ export const TowerHUD: React.FC = () => {
                     {plane.serviceProgress !== undefined && plane.serviceProgress > 0 && (
                       <div className="mt-1.5">
                         <div className="flex items-center justify-between text-[9px] text-zinc-400 mb-0.5 font-mono">
-                          <span>Progress Layanan</span>
+                          <span>{isId ? 'Progress Layanan' : 'Service Progress'}</span>
                           <span
                             className={
                               progressVal >= 100
@@ -492,7 +514,7 @@ export const TowerHUD: React.FC = () => {
                                 : 'text-zinc-300'
                             }
                           >
-                            {progressVal >= 100 ? '100% SELESAI' : `${progressVal}%`}
+                            {progressVal >= 100 ? (isId ? '100% SELESAI' : '100% COMPLETE') : `${progressVal}%`}
                           </span>
                         </div>
                         <div className="w-full bg-zinc-800 h-1.5 rounded-full overflow-hidden">
@@ -509,8 +531,9 @@ export const TowerHUD: React.FC = () => {
                     {/* Pending Request Indicator */}
                     {plane.pendingClearance && (
                       <div className="mt-1.5 pt-1 border-t border-zinc-800 flex items-center justify-between gap-1">
-                        <span className="text-[9px] text-amber-300 font-bold truncate">
-                          ⏳ {plane.pendingClearanceTitle || 'Menunggu Persetujuan ATC'}
+                        <span className="text-[9px] text-amber-300 font-bold truncate flex items-center gap-1">
+                          <Clock className="w-2.5 h-2.5 text-amber-400 shrink-0" />
+                          <span>{plane.pendingClearanceTitle || (isId ? 'Menunggu Persetujuan ATC' : 'Awaiting ATC Clearance')}</span>
                         </span>
                         {plane.pendingClearance === 'tech_verdict' ? (
                           <button
@@ -518,10 +541,11 @@ export const TowerHUD: React.FC = () => {
                               e.stopPropagation()
                               setSelectedTechReportAircraftId(plane.id)
                             }}
-                            className="px-2 py-0.5 rounded bg-sky-600 hover:bg-sky-500 text-white text-[9px] font-bold cursor-pointer shrink-0"
-                            title="Buka Lembar Telemetri Teknisi"
+                            className="px-2 py-0.5 rounded bg-sky-600 hover:bg-sky-500 text-white text-[9px] font-bold cursor-pointer shrink-0 flex items-center gap-1"
+                            title={isId ? 'Buka Lembar Telemetri Teknisi' : 'Open Technician Telemetry'}
                           >
-                            📋 Data
+                            <FileText className="w-2.5 h-2.5" />
+                            <span>{isId ? 'Data' : 'Report'}</span>
                           </button>
                         ) : (
                           <button
@@ -531,7 +555,7 @@ export const TowerHUD: React.FC = () => {
                             }}
                             className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[9px] font-bold cursor-pointer shrink-0"
                           >
-                            Setujui
+                            {isId ? 'Setujui' : 'Approve'}
                           </button>
                         )}
                       </div>
@@ -546,12 +570,13 @@ export const TowerHUD: React.FC = () => {
                             e.stopPropagation()
                             setSelectedTechReportAircraftId(plane.id)
                           }}
-                          className="text-sky-400 hover:text-sky-300 underline font-bold cursor-pointer"
+                          className="text-sky-400 hover:text-sky-300 underline font-bold cursor-pointer flex items-center gap-1"
                         >
-                          📋 Telemetri
+                          <FileText className="w-2.5 h-2.5" />
+                          <span>{isId ? 'Telemetri' : 'Telemetry'}</span>
                         </button>
                       ) : (
-                        <span>Teknis: Siap</span>
+                        <span>{isId ? 'Teknis: Siap' : 'Tech: Ready'}</span>
                       )}
                     </div>
                   </div>
@@ -597,7 +622,10 @@ export const TowerHUD: React.FC = () => {
                       className="flex items-center justify-between p-2 rounded bg-zinc-900/40 border border-zinc-850 text-zinc-500 text-[10px]"
                     >
                       <span className="font-bold text-zinc-400">{hangarName}</span>
-                      <span className="text-zinc-500 font-mono">🟢 BAY TERBUKA</span>
+                      <div className="flex items-center gap-1.5 text-zinc-500 font-mono">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500/80" />
+                        <span>{isId ? 'BAY TERBUKA' : 'BAY OPEN'}</span>
+                      </div>
                     </div>
                   )
                 }
@@ -632,7 +660,7 @@ export const TowerHUD: React.FC = () => {
                         {plane.status === 'overhaul'
                           ? `OVERHAUL ${Math.round(plane.serviceProgress || 0)}%`
                           : plane.turnaround?.engineOverhauled
-                          ? 'KLAIKAN 100%'
+                          ? (isId ? 'KLAIKAN 100%' : 'AIRWORTHY 100%')
                           : plane.status.replace(/_/g, ' ')}
                       </span>
                     </div>
@@ -650,9 +678,12 @@ export const TowerHUD: React.FC = () => {
                       >
                         <div className="flex items-center justify-between font-bold">
                           <span>
-                            {plane.hangarDiagnosisResult.verdict === 'perfect' && '🏆 TEARDOWN: TEPAT'}
-                            {plane.hangarDiagnosisResult.verdict === 'partial' && '⚡ TEARDOWN: SEBAGIAN'}
-                            {plane.hangarDiagnosisResult.verdict === 'wrong' && '❌ TEARDOWN: SALAH VONIS'}
+                            {plane.hangarDiagnosisResult.verdict === 'perfect' &&
+                              (isId ? '[TEARDOWN: TEPAT]' : '[TEARDOWN: VERIFIED]')}
+                            {plane.hangarDiagnosisResult.verdict === 'partial' &&
+                              (isId ? '[TEARDOWN: SEBAGIAN]' : '[TEARDOWN: PARTIAL]')}
+                            {plane.hangarDiagnosisResult.verdict === 'wrong' &&
+                              (isId ? '[TEARDOWN: SALAH VONIS]' : '[TEARDOWN: WRONG]')}
                           </span>
                           <span
                             className={
@@ -664,34 +695,55 @@ export const TowerHUD: React.FC = () => {
                             {plane.hangarDiagnosisResult.scoreChange >= 0
                               ? `+${plane.hangarDiagnosisResult.scoreChange}`
                               : plane.hangarDiagnosisResult.scoreChange}{' '}
-                            Skor
+                            {isId ? 'Skor' : 'Score'}
                           </span>
                         </div>
                         <p className="mt-0.5 text-[9px] opacity-90 leading-tight">
-                          Dugaan: <span className="font-semibold text-white">{plane.hangarDiagnosisResult.suspectedLabel}</span>
+                          {isId ? 'Dugaan: ' : 'Suspected: '}
+                          <span className="font-semibold text-white">
+                            {isId
+                              ? plane.hangarDiagnosisResult.suspectedLabel
+                              : plane.hangarDiagnosisResult.suspectedLabelEn || plane.hangarDiagnosisResult.suspectedLabel}
+                          </span>
                         </p>
                         <p className="text-[9px] opacity-90 leading-tight">
-                          Temuan: <span className="font-semibold text-white">{plane.hangarDiagnosisResult.actualReason}</span>
+                          {isId ? 'Temuan: ' : 'Findings: '}
+                          <span className="font-semibold text-white">
+                            {isId
+                              ? plane.hangarDiagnosisResult.actualReason
+                              : plane.hangarDiagnosisResult.actualReasonEn || plane.hangarDiagnosisResult.actualReason}
+                          </span>
                         </p>
                         {plane.hangarDiagnosisResult.secondaryReason && (
                           <p className="text-[9px] text-amber-300 leading-tight mt-0.5">
-                            Cacat Sekunder: {plane.hangarDiagnosisResult.secondaryReason}
+                            {isId ? 'Cacat Sekunder: ' : 'Secondary Defect: '}
+                            {isId
+                              ? plane.hangarDiagnosisResult.secondaryReason
+                              : plane.hangarDiagnosisResult.secondaryReasonEn || plane.hangarDiagnosisResult.secondaryReason}
                           </p>
                         )}
                       </div>
                     ) : plane.suspectedAnomaly ? (
                       <div className="mt-1.5 p-1.5 rounded bg-zinc-900 border border-zinc-700/70 text-[10px] text-zinc-300 font-mono">
-                        <span className="text-amber-400 font-bold">🔍 Dugaan Anomali ATC: </span>
+                        <span className="text-amber-400 font-bold">
+                          {isId ? 'Dugaan Anomali ATC: ' : 'ATC Suspected Defect: '}
+                        </span>
                         <span>
-                          {ANOMALY_OPTIONS.find((o) => o.id === plane.suspectedAnomaly)?.label || plane.suspectedAnomaly}
+                          {(() => {
+                            const opt = ANOMALY_OPTIONS.find((o) => o.id === plane.suspectedAnomaly)
+                            return opt ? (isId ? opt.labelId : opt.labelEn) : plane.suspectedAnomaly
+                          })()}
                         </span>
                         <p className="text-[9px] text-zinc-400 mt-0.5 italic">
-                          Mekanik akan memverifikasi kebenaran saat Overhaul dimulai.
+                          {isId
+                            ? 'Mekanik akan memverifikasi kebenaran saat Overhaul dimulai.'
+                            : 'Maintenance will verify physical state during overhaul teardown.'}
                         </p>
                       </div>
                     ) : plane.emergencyReason ? (
-                      <p className="text-[10px] text-rose-300 italic font-mono mt-1 bg-rose-950/30 p-1 rounded border border-rose-900/40">
-                        ⚠️ Anomali: {plane.emergencyReason}
+                      <p className="text-[10px] text-rose-300 italic font-mono mt-1 bg-rose-950/30 p-1 rounded border border-rose-900/40 flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3 text-rose-400 shrink-0" />
+                        <span>{isId ? `Anomali: ${plane.emergencyReason}` : `Defect: ${plane.emergencyReason}`}</span>
                       </p>
                     ) : null}
 
@@ -801,9 +853,14 @@ export const TowerHUD: React.FC = () => {
             <div className="flex items-center gap-2">
               {latestAtcMsg && (
                 <button
-                  onClick={() => radioSound.speakAtcVoice(latestAtcMsg.message)}
+                  onClick={() =>
+                    radioSound.speakAtcVoice(
+                      latestAtcMsg.messageEn || latestAtcMsg.message,
+                      isId ? latestAtcMsg.messageId : latestAtcMsg.messageEn
+                    )
+                  }
                   className="px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 font-mono text-[10px] font-bold cursor-pointer transition-all flex items-center gap-1"
-                  title="Dengarkan Kembali Transmisi Suara ATC (Perempuan)"
+                  title={isId ? 'Dengarkan Kembali Transmisi Suara ATC (Perempuan)' : 'Replay ATC Radio Call (Female)'}
                 >
                   <Volume2 className="w-3.5 h-3.5 text-sky-400" />
                   <span>REPLAY ATC</span>
@@ -811,12 +868,17 @@ export const TowerHUD: React.FC = () => {
               )}
               {latestPilotMsg && (
                 <button
-                  onClick={() => radioSound.speakPilotVoice(latestPilotMsg.message)}
+                  onClick={() =>
+                    radioSound.speakPilotVoice(
+                      latestPilotMsg.messageEn || latestPilotMsg.message,
+                      isId ? latestPilotMsg.messageId : latestPilotMsg.messageEn
+                    )
+                  }
                   className="px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 font-mono text-[10px] font-bold cursor-pointer transition-all flex items-center gap-1"
-                  title="Dengarkan Kembali Transmisi Radio Pilot (Laki-laki)"
+                  title={isId ? 'Dengarkan Kembali Transmisi Radio Pilot/Teknisi' : 'Replay Pilot/Technician Radio Call'}
                 >
                   <Volume2 className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>REPLAY PILOT</span>
+                  <span>{isGroundCrewActive ? 'REPLAY TECH' : 'REPLAY PILOT'}</span>
                 </button>
               )}
             </div>
@@ -836,7 +898,10 @@ export const TowerHUD: React.FC = () => {
           {/* Non-Intrusive Notification for other aircraft awaiting clearance */}
           {otherPendingFlights.length > 0 && (
             <div className="flex items-center gap-2 px-2.5 py-1 mb-2 rounded bg-amber-950/50 border border-amber-600/60 text-[11px] font-mono text-amber-200">
-              <span className="font-semibold text-amber-300">⚠️ Pesawat lain menunggu izin:</span>
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span className="font-semibold text-amber-300">
+                {isId ? 'Pesawat lain menunggu izin:' : 'Other flights awaiting clearance:'}
+              </span>
               <div className="flex items-center gap-1.5 flex-wrap">
                 {otherPendingFlights.map((other) => (
                   <button
@@ -846,10 +911,10 @@ export const TowerHUD: React.FC = () => {
                       setFocusedFlightId(other.id)
                     }}
                     className="px-2 py-0.5 rounded bg-amber-500 hover:bg-amber-400 text-zinc-950 text-[10px] font-bold cursor-pointer transition-all flex items-center gap-1 shadow-sm"
-                    title={`Beralih fokus ke ${other.id}`}
+                    title={isId ? `Beralih fokus ke ${other.id}` : `Switch focus to ${other.id}`}
                   >
-                    <span>{other.id}: {other.pendingClearanceTitle || 'Izin'}</span>
-                    <span>↗️</span>
+                    <span>{other.id}: {other.pendingClearanceTitle || (isId ? 'Izin' : 'Clearance')}</span>
+                    <ArrowRight className="w-2.5 h-2.5" />
                   </button>
                 ))}
               </div>
@@ -907,8 +972,9 @@ export const TowerHUD: React.FC = () => {
                   </span>
                 </div>
                 <p className="text-xs text-zinc-200 font-mono leading-relaxed bg-zinc-950/70 p-2 rounded border border-zinc-800/80">
-                  {latestAtcMsg?.message ||
-                    'Jakarta Tower monitor frequency 118.200 MHz. Standing by for traffic.'}
+                  {isId
+                    ? (latestAtcMsg?.messageId || latestAtcMsg?.message || 'Jakarta Tower memonitor frekuensi 118.200 MHz. Siap melayani traffic.')
+                    : (latestAtcMsg?.messageEn || latestAtcMsg?.message || 'Jakarta Tower monitor frequency 118.200 MHz. Standing by for traffic.')}
                 </p>
               </div>
             </div>
@@ -935,7 +1001,7 @@ export const TowerHUD: React.FC = () => {
                   >
                     <span>
                       {isGroundCrewActive
-                        ? `TEKNISI DARAT • ${focusedAircraft ? `${focusedAircraft.id} (Ramp Tech)` : 'MAINTENANCE'}`
+                        ? `${isId ? 'TEKNISI DARAT' : 'GROUND TECH'} • ${focusedAircraft ? `${focusedAircraft.id} (Ramp Tech)` : 'MAINTENANCE'}`
                         : `PILOT • ${focusedAircraft ? `${focusedAircraft.id} (${focusedAircraft.airline})` : 'AIRCRAFT'}`}
                     </span>
                     {isPilotSpeaking && (
@@ -978,19 +1044,22 @@ export const TowerHUD: React.FC = () => {
                         }`}
                       >
                         {focusedAircraft.pendingClearance === 'tech_verdict'
-                          ? 'LAPORAN TEKNISI MASUK: TINJAU DATA'
-                          : `MEMINTA: ${focusedAircraft.pendingClearanceTitle}`}
+                          ? (isId ? 'LAPORAN TEKNISI MASUK: TINJAU DATA' : 'TECHNICIAN REPORT IN: REVIEW TELEMETRY')
+                          : `${isId ? 'MEMINTA' : 'REQUESTING'}: ${focusedAircraft.pendingClearanceTitle}`}
                       </div>
                       <p>
-                        {latestPilotMsg?.message ||
-                          `${focusedAircraft.id} requesting ${focusedAircraft.pendingClearanceTitle}, standing by for ATC clearance.`}
+                        {isId
+                          ? (latestPilotMsg?.messageId || latestPilotMsg?.message || `${focusedAircraft.id} meminta ${focusedAircraft.pendingClearanceTitle}, menunggu izin ATC.`)
+                          : (latestPilotMsg?.messageEn || latestPilotMsg?.message || `${focusedAircraft.id} requesting ${focusedAircraft.pendingClearanceTitle}, standing by for ATC clearance.`)}
                       </p>
                     </div>
                   ) : latestPilotMsg ? (
-                    <p>{latestPilotMsg.message}</p>
+                    <p>{isId ? (latestPilotMsg.messageId || latestPilotMsg.message) : (latestPilotMsg.messageEn || latestPilotMsg.message)}</p>
                   ) : (
                     <p className="text-zinc-500 italic">
-                      {focusedAircraft?.id || 'Pesawat'} siap di frekuensi 118.200 MHz.
+                      {isId
+                        ? `${focusedAircraft?.id || 'Pesawat'} siap di frekuensi 118.200 MHz.`
+                        : `${focusedAircraft?.id || 'Aircraft'} ready on frequency 118.200 MHz.`}
                     </p>
                   )}
                 </div>
@@ -1023,7 +1092,7 @@ export const TowerHUD: React.FC = () => {
                   }`}
                 >
                   {isGroundCrewActive && <Wrench className="w-2 h-2" />}
-                  <span>{isGroundCrewActive ? 'TEKNISI' : 'PILOT'}</span>
+                  <span>{isGroundCrewActive ? (isId ? 'TEKNISI' : 'TECH') : 'PILOT'}</span>
                 </div>
               </div>
             </div>
@@ -1038,29 +1107,29 @@ export const TowerHUD: React.FC = () => {
                   <button
                     onClick={() => setSelectedTechReportAircraftId(focusedAircraft.id, 'telemetry')}
                     className="flex-1 py-2 px-3 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-mono font-bold text-xs shadow-lg cursor-pointer transition-all flex items-center justify-center gap-2 animate-pulse"
-                    title="Buka laporan telemetri teknisi untuk membaca statistik lengkap"
+                    title={isId ? 'Buka laporan telemetri teknisi untuk membaca statistik lengkap' : 'Open technician telemetry report to review raw stats'}
                   >
                     <FileText className="w-4 h-4" />
-                    <span>📋 BUKA LEMBAR STATISTIK TEKNISI [{focusedAircraft.id}]</span>
+                    <span>{isId ? `BUKA LEMBAR STATISTIK TEKNISI [${focusedAircraft.id}]` : `OPEN TECHNICIAN REPORT [${focusedAircraft.id}]`}</span>
                   </button>
 
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => resolveTechVerdict(focusedAircraft.id, 'airworthy')}
                       className="py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-mono font-bold text-xs shadow-lg cursor-pointer transition-all flex items-center gap-1.5"
-                      title="Setujui pesawat untuk boarding penumpang (Putusan mandiri ATC tanpa petunjuk kelayakan)"
+                      title={isId ? 'Setujui pesawat untuk boarding penumpang (Putusan mandiri ATC)' : 'Approve aircraft for passenger boarding'}
                     >
                       <Check className="w-4 h-4" />
-                      <span>✓ LOLOSKAN KE BOARDING</span>
+                      <span>{isId ? 'LOLOSKAN KE BOARDING' : 'APPROVE BOARDING'}</span>
                     </button>
 
                     <button
                       onClick={() => setSelectedTechReportAircraftId(focusedAircraft.id, 'pick_anomaly')}
                       className="py-2 px-3 rounded-lg bg-rose-700 hover:bg-rose-600 text-white font-mono font-bold text-xs border border-rose-500 cursor-pointer transition-all flex items-center gap-1.5 shadow-lg"
-                      title="Tolak penerbangan & pilih anomali yang dicurigai untuk dikirim ke hangar"
+                      title={isId ? 'Tolak penerbangan & pilih anomali yang dicurigai untuk dikirim ke hangar' : 'Reject flight & specify suspected defect to route to hangar'}
                     >
                       <Wrench className="w-4 h-4" />
-                      <span>🛠 TOLAK & DEREK KE HANGAR</span>
+                      <span>{isId ? 'TOLAK & DEREK KE HANGAR' : 'REJECT & TOW TO HANGAR'}</span>
                     </button>
                   </div>
                 </div>
@@ -1072,17 +1141,17 @@ export const TowerHUD: React.FC = () => {
                   >
                     <Check className="w-4 h-4" />
                     <span>
-                      SETUJUI [{focusedAircraft.id}]: {focusedAircraft.pendingClearanceTitle || 'IZIN OPERASIONAL'}
+                      {isId ? 'SETUJUI' : 'APPROVE'} [{focusedAircraft.id}]: {focusedAircraft.pendingClearanceTitle || (isId ? 'IZIN OPERASIONAL' : 'CLEARANCE')}
                     </span>
                   </button>
 
                   <button
                     onClick={() => denyClearance(focusedAircraft.id)}
                     className="py-2 px-3 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-mono font-bold text-xs border border-zinc-700 cursor-pointer transition-all flex items-center gap-1.5"
-                    title="Tahan posisi pesawat dan batalkan instruksi"
+                    title={isId ? 'Tahan posisi pesawat dan batalkan instruksi' : 'Hold aircraft position and cancel clearance'}
                   >
                     <X className="w-4 h-4 text-rose-400" />
-                    <span>TAHAN</span>
+                    <span>{isId ? 'TAHAN' : 'HOLD'}</span>
                   </button>
                 </>
               )}
@@ -1098,7 +1167,11 @@ export const TowerHUD: React.FC = () => {
                   className="flex-1 py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-mono font-bold text-xs shadow-lg cursor-pointer transition-all flex items-center justify-center gap-2 animate-pulse"
                 >
                   <Check className="w-4 h-4" />
-                  <span>RILIS [{focusedAircraft.id}] DARI HANGAR MENUJU GATE (Kelaikan 100%)</span>
+                  <span>
+                    {isId
+                      ? `RILIS [${focusedAircraft.id}] DARI HANGAR MENUJU GATE (Kelaikan 100%)`
+                      : `RELEASE [${focusedAircraft.id}] FROM HANGAR TO GATE (100% Airworthy)`}
+                  </span>
                 </button>
               ) : (
                 <button
@@ -1106,7 +1179,11 @@ export const TowerHUD: React.FC = () => {
                   className="flex-1 py-2 px-3 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-mono font-bold text-xs shadow-lg cursor-pointer transition-all flex items-center justify-center gap-2 animate-pulse"
                 >
                   <Wrench className="w-4 h-4" />
-                  <span>MULAI OVERHAUL & PERBAIKAN KOMPONEN [{focusedAircraft.id}]</span>
+                  <span>
+                    {isId
+                      ? `MULAI OVERHAUL & PERBAIKAN KOMPONEN [${focusedAircraft.id}]`
+                      : `START COMPONENT OVERHAUL & REPAIR [${focusedAircraft.id}]`}
+                  </span>
                 </button>
               )}
             </div>
@@ -1124,7 +1201,7 @@ export const TowerHUD: React.FC = () => {
                   ? 'bg-zinc-800 text-emerald-400 font-bold'
                   : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
               }`}
-              title="Kamera Menara Kontrol (Drag mouse untuk melihat sekeliling bandara)"
+              title={isId ? 'Kamera Menara Kontrol (Drag mouse untuk melihat sekeliling bandara)' : 'Control Tower View (Drag mouse to look around)'}
             >
               <Camera className="w-4 h-4" />
             </button>
@@ -1135,7 +1212,7 @@ export const TowerHUD: React.FC = () => {
                   ? 'bg-zinc-800 text-emerald-400 font-bold'
                   : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
               }`}
-              title="Teropong Menara (Zoom fokus pesawat)"
+              title={isId ? 'Teropong Menara (Zoom fokus pesawat)' : 'Tower Binoculars (Zoom aircraft focus)'}
             >
               <Search className="w-4 h-4" />
             </button>
@@ -1146,7 +1223,7 @@ export const TowerHUD: React.FC = () => {
                   ? 'bg-zinc-800 text-emerald-400 font-bold'
                   : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
               }`}
-              title="Kamera Pengejar (Chase Cam)"
+              title={isId ? 'Kamera Pengejar (Chase Cam)' : 'Chase Camera'}
             >
               <Eye className="w-4 h-4" />
             </button>
@@ -1154,7 +1231,7 @@ export const TowerHUD: React.FC = () => {
             <button
               onClick={togglePause}
               className="p-2 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 cursor-pointer transition-all"
-              title={isPaused ? 'Lanjutkan Simulasi' : 'Jeda Simulasi'}
+              title={isPaused ? (isId ? 'Lanjutkan Simulasi' : 'Resume Simulation') : (isId ? 'Jeda Simulasi' : 'Pause Simulation')}
             >
               {isPaused ? <Play className="w-4 h-4 text-emerald-400" /> : <Pause className="w-4 h-4" />}
             </button>
@@ -1165,8 +1242,9 @@ export const TowerHUD: React.FC = () => {
             <div className="flex-1 max-w-2xl bg-zinc-950/95 border border-zinc-800 rounded-lg p-2.5 shadow-xl font-mono text-xs flex flex-col gap-2">
               <div className="flex items-center justify-between pb-1 border-b border-zinc-800">
                 <div className="flex items-center gap-2">
-                  <span className="font-bold text-zinc-100">
-                    ✈️ {focusedAircraft.id} ({focusedAircraft.airline})
+                  <span className="font-bold text-zinc-100 flex items-center gap-1.5">
+                    <Plane className="w-3.5 h-3.5 text-sky-400" />
+                    <span>{focusedAircraft.id} ({focusedAircraft.airline})</span>
                   </span>
                   <span className="px-1.5 py-0.2 rounded bg-zinc-800 text-sky-400 text-[10px] font-bold">
                     {focusedAircraft.assignedGate || focusedAircraft.gate || 'Airborne'}
@@ -1176,7 +1254,9 @@ export const TowerHUD: React.FC = () => {
                   </span>
                 </div>
                 <div className="text-[10px] text-zinc-400">
-                  {isHangarAircraft ? 'Pemeliharaan Berat Hangar' : 'Fokus Kontrol ATC 1-per-1'}
+                  {isHangarAircraft
+                    ? (isId ? 'Pemeliharaan Berat Hangar' : 'Heavy Hangar Maintenance')
+                    : (isId ? 'Fokus Kontrol ATC 1-per-1' : '1-by-1 ATC Focused Control')}
                 </div>
               </div>
 
@@ -1185,7 +1265,7 @@ export const TowerHUD: React.FC = () => {
                 <div className="grid grid-cols-5 gap-1.5 text-center text-[9px]">
                   {/* 1. Hangar Bay */}
                   <div className="p-1 rounded border bg-emerald-950/40 border-emerald-500/60 text-emerald-300">
-                    <span className="block font-bold">1. Masuk Bay</span>
+                    <span className="block font-bold">{isId ? '1. Masuk Bay' : '1. Docked'}</span>
                     <span>✓ Docked</span>
                   </div>
 
@@ -1212,22 +1292,22 @@ export const TowerHUD: React.FC = () => {
                     title={
                       focusedAircraft.hangarDiagnosisResult
                         ? focusedAircraft.hangarDiagnosisResult.message
-                        : focusedAircraft.emergencyReason || 'Sistem Diperiksa Teknis'
+                        : focusedAircraft.emergencyReason || (isId ? 'Sistem Diperiksa Teknis' : 'Technical Inspection')
                     }
                   >
-                    <span className="block font-bold">2. Diagnosa</span>
-                    <span className="truncate block">
+                    <span className="block font-bold">{isId ? '2. Diagnosa' : '2. Diagnosis'}</span>
+                    <span className="truncate block font-semibold">
                       {focusedAircraft.hangarDiagnosisResult
                         ? focusedAircraft.hangarDiagnosisResult.verdict === 'perfect'
-                          ? '🏆 Tepat (+150)'
+                          ? (isId ? 'Tepat (+150)' : 'Verified (+150)')
                           : focusedAircraft.hangarDiagnosisResult.verdict === 'partial'
-                          ? '⚡ Sebagian (+40)'
-                          : '❌ Salah (-80)'
+                          ? (isId ? 'Sebagian (+40)' : 'Partial (+40)')
+                          : (isId ? 'Salah (-80)' : 'Wrong (-80)')
                         : focusedAircraft.suspectedAnomaly
-                        ? '🔍 Diduga'
+                        ? (isId ? 'Diduga' : 'Suspected')
                         : focusedAircraft.emergencyReason
-                        ? '⚠️ Ada Cacat'
-                        : '✓ Diinspeksi'}
+                        ? (isId ? 'Ada Cacat' : 'Defect Found')
+                        : (isId ? 'Diinspeksi' : 'Inspected')}
                     </span>
                   </div>
 
@@ -1245,15 +1325,15 @@ export const TowerHUD: React.FC = () => {
                         ? 'bg-amber-950/70 border-amber-400 text-amber-200 animate-pulse font-bold'
                         : 'bg-amber-900/40 border-amber-600/60 text-amber-300 hover:border-amber-400 cursor-pointer font-bold'
                     }`}
-                    title="Mulai atau tinjau progres overhaul turbofan & hidrolik"
+                    title={isId ? 'Mulai atau tinjau progres overhaul komponen' : 'Start or review overhaul progress'}
                   >
-                    <span className="block font-bold">3. Overhaul Mesin</span>
+                    <span className="block font-bold">{isId ? '3. Overhaul' : '3. Overhaul'}</span>
                     <span>
                       {focusedAircraft.turnaround?.engineOverhauled
-                        ? '✓ Selesai'
+                        ? (isId ? '✓ Selesai' : '✓ Done')
                         : focusedAircraft.status === 'overhaul'
                         ? `${Math.round(focusedAircraft.serviceProgress || 0)}%`
-                        : '⚙️ Klik Mulai'}
+                        : (isId ? 'Mulai' : 'Start')}
                     </span>
                   </div>
 
@@ -1265,9 +1345,11 @@ export const TowerHUD: React.FC = () => {
                         : 'bg-zinc-900 border-zinc-800 text-zinc-500'
                     }`}
                   >
-                    <span className="block font-bold">4. Kelaikan 100%</span>
+                    <span className="block font-bold">{isId ? '4. Kelaikan 100%' : '4. Certified'}</span>
                     <span>
-                      {focusedAircraft.turnaround?.engineOverhauled ? '✓ Lolos Uji' : '○ Kalibrasi'}
+                      {focusedAircraft.turnaround?.engineOverhauled
+                        ? (isId ? '✓ Lolos Uji' : '✓ Pass')
+                        : (isId ? '○ Kalibrasi' : '○ Testing')}
                     </span>
                   </div>
 
@@ -1283,11 +1365,13 @@ export const TowerHUD: React.FC = () => {
                         ? 'bg-sky-950/70 border-sky-400 text-sky-200 hover:border-sky-300 cursor-pointer animate-pulse font-bold'
                         : 'bg-zinc-900 border-zinc-800 text-zinc-500'
                     }`}
-                    title="Rilis pesawat keluar hangar dan taksi ke gate penjemputan penumpang"
+                    title={isId ? 'Rilis pesawat keluar hangar dan taksi ke gate penjemputan penumpang' : 'Release aircraft from hangar and taxi to passenger gate'}
                   >
-                    <span className="block font-bold">5. Rilis ke Gate</span>
+                    <span className="block font-bold">{isId ? '5. Rilis Gate' : '5. Gate Release'}</span>
                     <span>
-                      {focusedAircraft.turnaround?.engineOverhauled ? '🚪 Klik Rilis' : '○ Menunggu'}
+                      {focusedAircraft.turnaround?.engineOverhauled
+                        ? (isId ? 'Rilis' : 'Release')
+                        : (isId ? '○ Menunggu' : '○ Waiting')}
                     </span>
                   </div>
                 </div>
@@ -1304,7 +1388,7 @@ export const TowerHUD: React.FC = () => {
                         : 'bg-zinc-900 border-zinc-800 text-zinc-500'
                     }`}
                   >
-                    <span className="block font-bold">1. Turun Pax</span>
+                    <span className="block font-bold">{isId ? '1. Turun Pax' : '1. Deboard'}</span>
                     <span>{focusedAircraft.turnaround?.deboarded ? '✓' : '○'}</span>
                   </div>
 
@@ -1318,7 +1402,7 @@ export const TowerHUD: React.FC = () => {
                         : 'bg-zinc-900 border-zinc-800 text-zinc-500'
                     }`}
                   >
-                    <span className="block font-bold">2. Kabin</span>
+                    <span className="block font-bold">{isId ? '2. Kabin' : '2. Cabin'}</span>
                     <span>{focusedAircraft.turnaround?.cabinCleaned ? '✓' : '○'}</span>
                   </div>
 
@@ -1332,7 +1416,7 @@ export const TowerHUD: React.FC = () => {
                         : 'bg-zinc-900 border-zinc-800 text-zinc-500'
                     }`}
                   >
-                    <span className="block font-bold">3. Avtur</span>
+                    <span className="block font-bold">{isId ? '3. Avtur' : '3. Fuel'}</span>
                     <span>{focusedAircraft.turnaround?.refueled ? '✓' : '○'}</span>
                   </div>
 
@@ -1356,16 +1440,16 @@ export const TowerHUD: React.FC = () => {
                     }`}
                     title={
                       focusedAircraft.techReport
-                        ? 'Klik untuk membuka lembar statistik telemetri teknisi'
-                        : 'Pemeriksaan teknis kelaikan udara'
+                        ? (isId ? 'Klik untuk membuka lembar statistik telemetri teknisi' : 'Click to open diagnostic telemetry report')
+                        : (isId ? 'Pemeriksaan teknis kelaikan udara' : 'Pre-flight technical inspection')
                     }
                   >
-                    <span className="block font-bold">4. Teknis</span>
+                    <span className="block font-bold">{isId ? '4. Teknis' : '4. Tech'}</span>
                     <span>
                       {focusedAircraft.turnaround?.techInspected
                         ? '✓'
                         : focusedAircraft.pendingClearance === 'tech_verdict'
-                        ? '📋 Data'
+                        ? (isId ? 'Data' : 'Report')
                         : '○'}
                     </span>
                   </div>
@@ -1380,7 +1464,7 @@ export const TowerHUD: React.FC = () => {
                         : 'bg-zinc-900 border-zinc-800 text-zinc-500'
                     }`}
                   >
-                    <span className="block font-bold">5. Boarding</span>
+                    <span className="block font-bold">{isId ? '5. Boarding' : '5. Board'}</span>
                     <span>{focusedAircraft.turnaround?.boarded ? '✓' : '○'}</span>
                   </div>
 
@@ -1395,7 +1479,7 @@ export const TowerHUD: React.FC = () => {
                         : 'bg-zinc-900 border-zinc-800 text-zinc-500'
                     }`}
                   >
-                    <span className="block font-bold">6. Pushback</span>
+                    <span className="block font-bold">{isId ? '6. Pushback' : '6. Pushback'}</span>
                     <span>
                       {focusedAircraft.status === 'taxi_to_runway' ||
                       focusedAircraft.status === 'takeoff' ||
@@ -1415,7 +1499,7 @@ export const TowerHUD: React.FC = () => {
                         : 'bg-zinc-900 border-zinc-800 text-zinc-500'
                     }`}
                   >
-                    <span className="block font-bold">7. Taksi Rwy</span>
+                    <span className="block font-bold">{isId ? '7. Taksi Rwy' : '7. Taxi Rwy'}</span>
                     <span>
                       {focusedAircraft.status === 'takeoff' || focusedAircraft.status === 'airborne'
                         ? '✓'
@@ -1431,7 +1515,7 @@ export const TowerHUD: React.FC = () => {
                         : 'bg-zinc-900 border-zinc-800 text-zinc-500'
                     }`}
                   >
-                    <span className="block font-bold">8. Lepas</span>
+                    <span className="block font-bold">{isId ? '8. Lepas' : '8. Takeoff'}</span>
                     <span>{focusedAircraft.status === 'airborne' ? '✓' : '○'}</span>
                   </div>
                 </div>
@@ -1442,8 +1526,9 @@ export const TowerHUD: React.FC = () => {
           {/* Bottom Right: Voice PTT Spacebar & Info */}
           <div className="flex flex-col items-end gap-1">
             {transcript && (
-              <div className="px-3 py-1 rounded bg-zinc-900 border border-zinc-700 text-zinc-200 text-xs font-mono max-w-xs shadow-md">
-                🎙️ "{transcript}"
+              <div className="px-3 py-1 rounded bg-zinc-900 border border-zinc-700 text-zinc-200 text-xs font-mono max-w-xs shadow-md flex items-center gap-1.5">
+                <Mic className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                <span>"{transcript}"</span>
               </div>
             )}
 
@@ -1459,8 +1544,9 @@ export const TowerHUD: React.FC = () => {
               <span>PTT MIC [SPACE]</span>
             </button>
 
-            <div className="text-[10px] text-zinc-500 font-mono">
-              🖱️ Drag mouse untuk rotasi 3D Menara
+            <div className="text-[10px] text-zinc-500 font-mono flex items-center gap-1">
+              <Compass className="w-3.5 h-3.5 text-zinc-400" />
+              <span>{isId ? 'Drag mouse untuk rotasi 3D Menara' : 'Drag mouse to rotate 3D Tower'}</span>
             </div>
           </div>
         </div>

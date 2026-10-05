@@ -99,13 +99,33 @@ export const getInitialAircrafts = (
 let frameCounter = 0
 let lastInboundSpawnTime = Date.now()
 
-// ATC Controller (Female Voice) & Pilot/Crew (Male Voice) Voice transmission helpers
-function atcInstruction(text: string) {
-  radioSound.speakAtcVoice(text)
+export function getInitialLanguage(): 'id' | 'en' {
+  if (typeof window !== 'undefined') {
+    const saved = localStorage.getItem('atc_language')
+    if (saved === 'id' || saved === 'en') return saved
+    const browserLang = (navigator.language || (navigator as any).userLanguage || '').toLowerCase()
+    if (browserLang.startsWith('id')) return 'id'
+  }
+  return 'en'
 }
 
-function pilotReadback(text: string) {
-  radioSound.speakPilotVoice(text)
+// ATC Controller (Female Voice) & Pilot/Crew (Male Voice) Voice transmission helpers
+function atcInstruction(textEn: string, textId?: string) {
+  const currentLang = useGameStore?.getState ? useGameStore.getState().language : 'id'
+  const display = currentLang === 'id' ? (textId || textEn) : textEn
+  radioSound.speakAtcVoice(textEn, display)
+}
+
+function pilotReadback(textEn: string, textId?: string) {
+  const currentLang = useGameStore?.getState ? useGameStore.getState().language : 'id'
+  const display = currentLang === 'id' ? (textId || textEn) : textEn
+  radioSound.speakPilotVoice(textEn, display)
+}
+
+function groundCrewTransmit(textEn: string, textId?: string) {
+  const currentLang = useGameStore?.getState ? useGameStore.getState().language : 'id'
+  const display = currentLang === 'id' ? (textId || textEn) : textEn
+  radioSound.speakGroundCrewVoice(textEn, display)
 }
 
 export const useGameStore = create<GameState>((set, get) => ({
@@ -128,11 +148,20 @@ export const useGameStore = create<GameState>((set, get) => ({
   setFocusedFlightId: (id: string | null) => set({ focusedFlightId: id, selectedAircraftId: id }),
   micActive: false,
 
+  // Language state & switcher
+  language: getInitialLanguage(),
+  setLanguage: (lang: 'id' | 'en') => {
+    try {
+      localStorage.setItem('atc_language', lang)
+    } catch {}
+    set({ language: lang })
+  },
+
   // 3D Tower & Operations state
   viewMode: 'tower',
   activeChannel: 'ground',
   tutorialActive: true,
-  tutorialText: 'GIA123 baru saja mendarat di Gate 1. Klik [✓ SETUJUI IJIN] untuk memulai siklus layanan pesawat!',
+  tutorialText: 'GIA123 baru saja mendarat di Gate 1. Klik [SETUJUI IZIN] untuk memulai siklus layanan pesawat!',
   weather: {
     condition: 'Cerah',
     temp: 28,
@@ -474,8 +503,14 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     if (decision === 'airworthy') {
       // ATC clears the aircraft for passenger boarding
-      atcInstruction(`${id}, technical telemetry accepted, aircraft cleared for passenger boarding.`)
-      radioSound.speakPilotVoice(`${id}, roger Tower, commencing passenger boarding.`)
+      atcInstruction(
+        `${id}, technical telemetry accepted, aircraft cleared for passenger boarding.`,
+        `${id}, data telemetri teknis disetujui, pesawat diizinkan memulai boarding penumpang.`
+      )
+      pilotReadback(
+        `${id}, roger Tower, commencing passenger boarding.`,
+        `${id}, dimengerti Menara, memulai boarding penumpang.`
+      )
 
       if (!isDefective) {
         // Player correctly verified healthy telemetry!
@@ -484,7 +519,9 @@ export const useGameStore = create<GameState>((set, get) => ({
           timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
           sender: 'SYSTEM',
           callsign: id,
-          message: `KEPUTUSAN TEPAT ATC: Evaluasi telemetri ${id} akurat. Seluruh parameter normal. Boarding 180 penumpang dimulai (+15 Mil Udara).`,
+          message: `[KEPUTUSAN TEPAT ATC] Evaluasi telemetri ${id} akurat. Seluruh parameter normal. Boarding penumpang dimulai (+15 Mil Udara).`,
+          messageId: `[KEPUTUSAN TEPAT ATC] Evaluasi telemetri ${id} akurat. Seluruh parameter normal. Boarding penumpang dimulai (+15 Mil Udara).`,
+          messageEn: `[ACCURATE ATC DECISION] Telemetry evaluation for ${id} verified. All parameters normal. Boarding cleared (+15 Air Miles).`,
           type: 'info',
         }
         set((state) => ({
@@ -508,16 +545,20 @@ export const useGameStore = create<GameState>((set, get) => ({
           ),
           commsLog: [...state.commsLog, successMsg].slice(-50),
           selectedTechReportAircraftId: null,
-          tutorialText: `Boarding ${id} sedang berlangsung. Setelah 180 pax naik, berikan izin [🚜 Dorongan Mundur (Pushback)]!`,
+          tutorialText: `Boarding ${id} sedang berlangsung. Setelah 180 pax naik, berikan izin dorongan mundur (pushback)!`,
         }))
       } else {
         // Player failed to spot the anomaly in the report!
+        const defectTextId = report.defectReasonId || report.defectReason || 'anomali kritis'
+        const defectTextEn = report.defectReasonEn || report.defectReason || 'critical anomaly'
         const alertMsg: CommLogItem = {
           id: `tech-verdict-${Date.now()}`,
           timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
           sender: 'SYSTEM',
           callsign: id,
-          message: `⚠️ KELALAIAN EVALUASI ATC: Anda meloloskan ${id} yang memiliki anomali (${report.defectReason})! Catatan keselamatan bandara tercemar (-25 Mil Udara).`,
+          message: `[KELALAIAN EVALUASI ATC] Anda meloloskan ${id} yang memiliki anomali (${defectTextId})! Catatan keselamatan bandara tercemar (-25 Mil Udara).`,
+          messageId: `[KELALAIAN EVALUASI ATC] Anda meloloskan ${id} yang memiliki anomali (${defectTextId})! Catatan keselamatan bandara tercemar (-25 Mil Udara).`,
+          messageEn: `[ATC OVERSIGHT ALERT] You cleared ${id} with an active anomaly (${defectTextEn})! Airport safety record penalized (-25 Air Miles).`,
           type: 'alert',
         }
         set((state) => ({
@@ -531,7 +572,7 @@ export const useGameStore = create<GameState>((set, get) => ({
                   pendingClearance: undefined,
                   pendingClearanceTitle: undefined,
                   technicalHealth: 60,
-                  emergencyReason: report.defectReason,
+                  emergencyReason: defectTextId,
                   turnaround: {
                     ...(a.turnaround || {}),
                     techInspected: true,
@@ -547,17 +588,26 @@ export const useGameStore = create<GameState>((set, get) => ({
       // ATC rejects flight clearance and routes to Hangar for maintenance
       const suspected = suspectedAnomaly || 'unspecified_caution'
       const suspectedOption = ANOMALY_OPTIONS.find((o) => o.id === suspected)
-      const suspectName = suspectedOption ? suspectedOption.label : 'Pemeriksaan Lanjutan'
+      const suspectNameEn = suspectedOption ? suspectedOption.nameEn : 'pre-flight systems'
+      const suspectNameId = suspectedOption ? suspectedOption.nameId : 'pemeriksaan subsistem'
 
-      atcInstruction(`${id}, technical data review rejected, suspecting ${suspectName}. Hold boarding, ground tug taxi to Hangar 1.`)
-      radioSound.speakGroundCrewVoice(`${id}, copied Tower. Holding boarding, ground tug towing aircraft to Hangar 1. Hangar engineering team will inspect ${suspectName} during overhaul.`)
+      atcInstruction(
+        `${id}, technical data review rejected, suspecting ${suspectNameEn}. Hold boarding, ground tug taxi to Hangar 1.`,
+        `${id}, evaluasi data telemetri ditolak karena dugaan ${suspectNameId}. Tunda boarding, mobil derek bawa pesawat ke Hangar 1.`
+      )
+      groundCrewTransmit(
+        `${id}, copied Tower. Holding boarding, ground tug towing aircraft to Hangar 1. Hangar engineering team will inspect ${suspectNameEn} during overhaul.`,
+        `${id}, dimengerti Menara. Boarding ditunda, mobil derek membawa pesawat ke Hangar 1. Tim teknisi akan memeriksa ${suspectNameId} saat overhaul.`
+      )
 
       const rejectMsg: CommLogItem = {
         id: `tech-verdict-${Date.now()}`,
         timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
         sender: 'ATC' as const,
         callsign: id,
-        message: `RUJUKAN HANGAR: ${id} ditolak izin terbangnya karena dugaan Menara: "${suspectName}". Pesawat diderek ke Hangar 1 untuk investigasi pembongkaran.`,
+        message: `[RUJUKAN HANGAR] ${id} ditolak izin terbangnya karena dugaan Menara: "${suspectNameId}". Pesawat diderek ke Hangar 1 untuk investigasi pembongkaran.`,
+        messageId: `[RUJUKAN HANGAR] ${id} ditolak izin terbangnya karena dugaan Menara: "${suspectNameId}". Pesawat diderek ke Hangar 1 untuk investigasi pembongkaran.`,
+        messageEn: `[HANGAR ROUTING] ${id} flight clearance rejected due to suspected ${suspectNameEn}. Aircraft towed to Hangar 1 for component teardown.`,
         type: 'command',
       }
 
@@ -570,7 +620,7 @@ export const useGameStore = create<GameState>((set, get) => ({
                 assignedGate: 'Hangar 1',
                 gate: 'Hangar 1',
                 suspectedAnomaly: suspected,
-                emergencyReason: report.defectReason || `Dugaan: ${suspectName}`,
+                emergencyReason: report.defectReasonId || report.defectReason || `Dugaan: ${suspectNameId}`,
                 pendingClearance: undefined,
                 pendingClearanceTitle: undefined,
                 turnaround: {
@@ -582,7 +632,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         ),
         commsLog: [...state.commsLog, rejectMsg].slice(-50),
         selectedTechReportAircraftId: null,
-        tutorialText: `${id} sedang ditarik menuju Hangar 1. Teknisi akan membongkar komponen ${suspectName} dan mengevaluasi diagnosa Anda saat overhaul!`,
+        tutorialText: `${id} sedang ditarik menuju Hangar 1. Teknisi akan membongkar komponen ${suspectNameId} dan mengevaluasi diagnosa Anda saat overhaul!`,
       }))
     }
   },
@@ -895,13 +945,18 @@ export const useGameStore = create<GameState>((set, get) => ({
     const report = ac.techReport || generateTechReport(ac)
     const suspected = ac.suspectedAnomaly || 'unspecified_caution'
     const suspectedOption = ANOMALY_OPTIONS.find((o) => o.id === suspected)
-    const suspectLabel = suspectedOption ? suspectedOption.label : 'Pemeriksaan Umum'
+    const suspectNameEn = suspectedOption ? suspectedOption.nameEn : 'pre-flight systems'
+    const suspectNameId = suspectedOption ? suspectedOption.nameId : 'pemeriksaan subsistem'
+    const suspectLabelEn = suspectedOption ? suspectedOption.labelEn : 'General Inspection'
+    const suspectLabelId = suspectedOption ? suspectedOption.labelId : 'Pemeriksaan Umum'
 
     let verdict: 'perfect' | 'partial' | 'wrong' = 'wrong'
     let scoreDelta = 0
     let milesDelta = 0
-    let techSpeech = ''
-    let logMessage = ''
+    let techSpeechEn = ''
+    let techSpeechId = ''
+    let logMessageEn = ''
+    let logMessageId = ''
     let logType: 'info' | 'alert' = 'info'
 
     const matchesPrimary = report.isDefective && report.primaryDefect === suspected
@@ -917,17 +972,28 @@ export const useGameStore = create<GameState>((set, get) => ({
         verdict = 'partial'
         scoreDelta = 40
         milesDelta = 15
-        const secondaryTxt = report.secondaryDefectReason || report.defectReason || 'anomali sekunder'
-        techSpeech = `Tower, Hangar Chief on ${id}. Teardown confirms your diagnosis of ${suspectLabel}! However, our team also discovered a secondary defect you missed: ${secondaryTxt}. Good catch, but check all parameters closely. Small reward granted.`
-        logMessage = `⚡ DIAGNOSA BENAR SEBAGIAN: Dugaan Menara tepat pada ${suspectLabel} (${report.defectReason || ''})! Namun mekanik juga mendapati cacat tambahan: ${secondaryTxt}. (+15 Mil Udara, +40 Skor).`
+        const secondaryTxtId = report.secondaryDefectReasonId || report.defectReasonId || 'cacat sekunder'
+        const secondaryTxtEn = report.secondaryDefectReasonEn || report.defectReasonEn || 'secondary defect'
+
+        techSpeechEn = `Tower, Hangar Chief on ${id}. Teardown confirms your diagnosis of ${suspectNameEn}! However, our team also discovered a secondary defect you missed: ${secondaryTxtEn}. Good catch, but check all parameters closely. Small reward granted.`
+        techSpeechId = `Menara, Kepala Hangar pada ${id}. Pembongkaran mengonfirmasi diagnosa Anda pada ${suspectNameId}! Namun tim kami mendapati cacat sekunder yang terlewat: ${secondaryTxtId}. Tangkapan bagus, hadiah kecil diberikan.`
+
+        logMessageId = `[HASIL TEARDOWN - SEBAGIAN] Dugaan Menara tepat pada ${suspectNameId} (${report.defectReasonId || ''})! Namun mekanik juga mendapati cacat tambahan: ${secondaryTxtId}. (+15 Mil Udara, +40 Skor).`
+        logMessageEn = `[TEARDOWN - PARTIAL] ATC diagnosis confirmed on ${suspectNameEn} (${report.defectReasonEn || ''})! However, secondary defect was overlooked: ${secondaryTxtEn}. (+15 Air Miles, +40 Score).`
         logType = 'info'
       } else {
         // Case A: Benar & Tepat (100% accurate, praised by technician)
         verdict = 'perfect'
         scoreDelta = 150
         milesDelta = 60
-        techSpeech = `Tower, Hangar Chief on ${id}! Outstanding call! Disassembly confirms severe anomaly on ${suspectLabel}: ${report.defectReason || 'Internal failure'}. No other hidden defects found. You prevented a potential catastrophic incident in flight! Highest commendations!`
-        logMessage = `🏆 PUJIAN TEKNISI HANGAR: Diagnosa ATC sangat presisi! Komponen ${suspectLabel} mengalami kerusakan kritis (${report.defectReason}). Potensi insiden fatal berhasil dicegah! (+60 Mil Udara, +150 Skor).`
+        const defectReasonEn = report.defectReasonEn || 'severe internal failure'
+        const defectReasonId = report.defectReasonId || 'kerusakan internal kritis'
+
+        techSpeechEn = `Tower, Hangar Chief on ${id}! Outstanding call! Disassembly confirms severe anomaly on ${suspectNameEn}: ${defectReasonEn}. No other hidden defects found. You prevented a potential catastrophic incident in flight! Highest commendations!`
+        techSpeechId = `Menara, Kepala Hangar pada ${id}! Keputusan sangat tepat! Pembongkaran membuktikan kerusakan kritis pada ${suspectNameId}: ${defectReasonId}. Tidak ada cacat lain. Anda berhasil mencegah potensi insiden fatal di udara! Pujian tertinggi!`
+
+        logMessageId = `[HASIL TEARDOWN - TEPAT] Diagnosa ATC sangat presisi! Komponen ${suspectNameId} mengalami kerusakan kritis (${defectReasonId}). Potensi insiden fatal berhasil dicegah! (+60 Mil Udara, +150 Skor).`
+        logMessageEn = `[TEARDOWN - VERIFIED] Outstanding ATC diagnosis! Critical defect confirmed on ${suspectNameEn}: ${defectReasonEn}. Serious flight risk averted! (+60 Air Miles, +150 Score).`
         logType = 'info'
       }
     } else {
@@ -936,11 +1002,20 @@ export const useGameStore = create<GameState>((set, get) => ({
       scoreDelta = -80
       milesDelta = -30
       if (!report.isDefective) {
-        techSpeech = `Tower, Hangar Chief on ${id}. We completely dismantled the ${suspectLabel} system. All tolerances and pressures are 100% factory spec! The aircraft was perfectly healthy and grounded unnecessarily, disrupting flight schedules. Penalty recorded against tower!`
-        logMessage = `❌ SANKSI SALAH DIAGNOSA ATC: Pembongkaran membuktikan seluruh sistem ${id} termasuk ${suspectLabel} 100% normal dan layak terbang! Grounding tidak berdasar merugikan maskapai (-30 Mil Udara, -80 Skor).`
+        techSpeechEn = `Tower, Hangar Chief on ${id}. We completely dismantled the ${suspectNameEn}. All tolerances and pressures are 100% factory spec! The aircraft was perfectly healthy and grounded unnecessarily, disrupting flight schedules. Penalty recorded against tower oversight!`
+        techSpeechId = `Menara, Kepala Hangar pada ${id}. Kami telah membongkar sistem ${suspectNameId}. Seluruh toleransi dan tekanan 100% sesuai standar pabrik! Pesawat sebenarnya sehat dan diground tanpa alasan mendasar. Sanksi Menara dicatat!`
+
+        logMessageId = `[HASIL TEARDOWN - SALAH VONIS] Pembongkaran membuktikan seluruh sistem ${id} termasuk ${suspectNameId} 100% normal dan layak terbang! Grounding tidak berdasar merugikan maskapai (-30 Mil Udara, -80 Skor).`
+        logMessageEn = `[TEARDOWN - PENALTY] Teardown proves ${id} and ${suspectNameEn} were 100% normal within factory spec. Unnecessary grounding disrupted flight schedule (-30 Air Miles, -80 Score).`
       } else {
-        techSpeech = `Tower, Hangar Chief on ${id}. We inspected ${suspectLabel} as requested, but found zero defects. However, our mechanics uncovered the actual defect: ${report.defectReason || 'sistem lain'}. Your diagnosis missed the real threat. Penalty applied for inaccurate analysis!`
-        logMessage = `❌ SANKSI SALAH DIAGNOSA ATC: Anda menduga anomali ${suspectLabel} yang ternyata normal! Kerusakan sebenarnya adalah: ${report.defectReason || 'komponen lain'}. (-30 Mil Udara, -80 Skor).`
+        const defectReasonEn = report.defectReasonEn || 'another subsystem'
+        const defectReasonId = report.defectReasonId || 'komponen lain'
+
+        techSpeechEn = `Tower, Hangar Chief on ${id}. We inspected ${suspectNameEn} as requested, but found zero defects. However, our mechanics uncovered the actual defect: ${defectReasonEn}. Your diagnosis missed the real threat. Penalty applied for inaccurate analysis!`
+        techSpeechId = `Menara, Kepala Hangar pada ${id}. Kami memeriksa ${suspectNameId} sesuai laporan, namun sistem tersebut normal. Kerusakan aslinya berada pada: ${defectReasonId}. Diagnosa Anda meleset dari ancaman sebenarnya. Sanksi Menara diterapkan!`
+
+        logMessageId = `[HASIL TEARDOWN - SALAH VONIS] Anda menduga anomali ${suspectNameId} yang ternyata normal! Kerusakan sebenarnya adalah: ${defectReasonId}. (-30 Mil Udara, -80 Skor).`
+        logMessageEn = `[TEARDOWN - PENALTY] Suspected ${suspectNameEn} was verified healthy. Actual defect discovered was: ${defectReasonEn}. (-30 Air Miles, -80 Score).`
       }
       logType = 'alert'
     }
@@ -950,15 +1025,26 @@ export const useGameStore = create<GameState>((set, get) => ({
     const finalScoreDelta = alreadyEvaluated ? 0 : scoreDelta
     const finalMilesDelta = alreadyEvaluated ? 0 : milesDelta
 
-    atcInstruction(`${id}, heavy overhaul work order authorized in Hangar. Teardown report requested.`)
-    radioSound.speakGroundCrewVoice(techSpeech)
+    atcInstruction(
+      `${id}, heavy overhaul work order authorized in Hangar. Teardown report requested.`,
+      `${id}, surat perintah overhaul di hangar disetujui. Laporan pembongkaran diminta.`
+    )
+    groundCrewTransmit(techSpeechEn, techSpeechId)
+
+    const currentLang = get().language
+    const chosenLogMsg = currentLang === 'id' ? logMessageId : logMessageEn
 
     const diagnosisResult = {
       verdict,
-      suspectedLabel: suspectLabel,
-      actualReason: report.defectReason || 'Seluruh sistem dalam toleransi normal pabrikan',
-      secondaryReason: report.secondaryDefectReason,
-      message: logMessage,
+      suspectedLabel: suspectLabelId,
+      suspectedLabelEn: suspectLabelEn,
+      actualReason: report.defectReasonId || report.defectReason || 'Seluruh sistem dalam toleransi normal pabrikan',
+      actualReasonEn: report.defectReasonEn || 'All systems within factory operating limits',
+      secondaryReason: report.secondaryDefectReasonId || report.secondaryDefectReason,
+      secondaryReasonEn: report.secondaryDefectReasonEn,
+      message: chosenLogMsg,
+      messageId: logMessageId,
+      messageEn: logMessageEn,
       scoreChange: scoreDelta,
       airMilesChange: milesDelta,
     }
@@ -985,16 +1071,18 @@ export const useGameStore = create<GameState>((set, get) => ({
           timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
           sender: 'GROUND_CREW' as const,
           callsign: id,
-          message: logMessage,
+          message: chosenLogMsg,
+          messageId: logMessageId,
+          messageEn: logMessageEn,
           type: logType,
         },
       ].slice(-50),
       tutorialText: `[OVERHAUL ${id}] ${
         verdict === 'perfect'
-          ? '🏆 Pujian teknisi: Diagnosa Anda 100% tepat! Komponen rusak diganti baru.'
+          ? 'Pujian teknisi: Diagnosa Anda 100% tepat! Komponen rusak diganti baru.'
           : verdict === 'partial'
-          ? '⚡ Diagnosa benar sebagian, ada cacat lain terlewat! Teknisi memperbaiki keduanya.'
-          : '❌ Sanksi: Salah vonis komponen! Teknisi merakit kembali sesuai spek.'
+          ? 'Diagnosa benar sebagian, ada cacat lain terlewat! Teknisi memperbaiki keduanya.'
+          : 'Sanksi: Salah vonis komponen! Teknisi merakit kembali sesuai spek.'
       }`,
     }))
   },
@@ -1431,14 +1519,23 @@ export const useGameStore = create<GameState>((set, get) => ({
               pendingClearanceTitle = 'Tinjau Statistik Teknis & Ambil Keputusan'
               radioSound.playRogerBeep()
               if (ac.id === state.focusedFlightId) {
-                radioSound.speakGroundCrewVoice(`${ac.id}, pre-flight inspection complete, telemetry logged to console. Review technical report and advise disposition.`)
+                radioSound.speakGroundCrewVoice(
+                  `${ac.id}, pre-flight inspection complete, telemetry logged to console. Review technical report and advise disposition.`,
+                  state.language === 'id'
+                    ? `Jakarta Tower, inspeksi pra-terbang ${ac.id} selesai 100%. Data telemetri diagnostik diunggah ke terminal Anda. Silakan tinjau statistik laporan dan berikan instruksi lanjut.`
+                    : `Jakarta Tower, ${ac.id} pre-flight inspection completed 100%. Diagnostic telemetry uploaded to your terminal. Review report statistics and instruct whether to clear for boarding or route to hangar.`
+                )
               }
               const logMsg: CommLogItem = {
                 id: `tech-done-${Date.now()}`,
                 timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
                 sender: 'GROUND_CREW' as const,
                 callsign: ac.id,
-                message: `Jakarta Tower, ${ac.id} pre-flight inspection completed 100%. Diagnostic telemetry uploaded to your terminal. Review report statistics and instruct whether to clear for boarding or route to hangar.`,
+                message: state.language === 'id'
+                  ? `Jakarta Tower, inspeksi pra-terbang ${ac.id} selesai 100%. Data telemetri diagnostik diunggah ke terminal. Tinjau statistik laporan dan tentukan izin boarding atau kirim ke hangar.`
+                  : `Jakarta Tower, ${ac.id} pre-flight inspection completed 100%. Diagnostic telemetry uploaded to your terminal. Review report statistics and instruct whether to clear for boarding or route to hangar.`,
+                messageEn: `Jakarta Tower, ${ac.id} pre-flight inspection completed 100%. Diagnostic telemetry uploaded to your terminal. Review report statistics and instruct whether to clear for boarding or route to hangar.`,
+                messageId: `Jakarta Tower, inspeksi pra-terbang ${ac.id} selesai 100%. Data telemetri diagnostik diunggah ke terminal. Tinjau statistik laporan dan tentukan izin boarding atau kirim ke hangar.`,
                 type: 'info' as const,
               }
               updatedComms = [...updatedComms, logMsg]
@@ -1477,14 +1574,23 @@ export const useGameStore = create<GameState>((set, get) => ({
               pendingClearanceTitle = 'Izin Dorongan Mundur (Pushback)'
               radioSound.playRogerBeep()
               if (ac.id === state.focusedFlightId) {
-                pilotReadback(`${ac.id}, boarding completed, cabin doors closed, ready for pushback.`)
+                pilotReadback(
+                  `${ac.id}, boarding completed, cabin doors closed, ready for pushback.`,
+                  state.language === 'id'
+                    ? `${ac.id}, proses boarding telah selesai (180/180 pax). Pintu kabin tertutup rapat. Meminta izin dorongan mundur (pushback).`
+                    : `${ac.id}, boarding completed (180/180 pax). Cabin doors closed. Requesting pushback clearance.`
+                )
               }
               const logMsg: CommLogItem = {
                 id: `board-done-${Date.now()}`,
                 timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
                 sender: 'PILOT' as const,
                 callsign: ac.id,
-                message: `${ac.id}: Boarding completed (180/180 pax). Cabin doors closed. Requesting pushback clearance.`,
+                message: state.language === 'id'
+                  ? `${ac.id}: Boarding selesai (180/180 pax). Pintu kabin tertutup. Meminta izin pushback.`
+                  : `${ac.id}: Boarding completed (180/180 pax). Cabin doors closed. Requesting pushback clearance.`,
+                messageEn: `${ac.id}: Boarding completed (180/180 pax). Cabin doors closed. Requesting pushback clearance.`,
+                messageId: `${ac.id}: Boarding selesai (180/180 pax). Pintu kabin tertutup. Meminta izin pushback.`,
                 type: 'info' as const,
               }
               updatedComms = [...updatedComms, logMsg]
@@ -1523,14 +1629,21 @@ export const useGameStore = create<GameState>((set, get) => ({
               pendingClearance = 'overhaul'
               pendingClearanceTitle = 'Izin Overhaul & Perbaikan Berat Hangar'
               radioSound.speakGroundCrewVoice(
-                `Jakarta Tower, Hangar Maintenance. ${ac.id} is docked in ${ac.assignedGate || 'Hangar 1'}. Engineering team ready to start component overhaul. Standing by for work order clearance.`
+                `Jakarta Tower, Hangar Maintenance. ${ac.id} is docked in ${ac.assignedGate || 'Hangar 1'}. Engineering team ready to start component overhaul. Standing by for work order clearance.`,
+                state.language === 'id'
+                  ? `Jakarta Tower, Pemeliharaan Hangar. ${ac.id} telah parkir di ${ac.assignedGate || 'Hangar 1'}. Tim teknisi siap memulai overhaul komponen. Menunggu izin perintah kerja ATC.`
+                  : `Jakarta Tower, Hangar Maintenance. ${ac.id} is docked in ${ac.assignedGate || 'Hangar 1'}. Engineering team ready to start component overhaul. Standing by for work order clearance.`
               )
               const arriveHangarMsg: CommLogItem = {
                 id: `hangar-dock-${Date.now()}`,
                 timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
                 sender: 'GROUND_CREW' as const,
                 callsign: ac.id,
-                message: `${ac.id}: Di dalam ${ac.assignedGate || 'Hangar 1'}. Tim teknisi siap melakukan overhaul sistem. Menunggu persetujuan ATC.`,
+                message: state.language === 'id'
+                  ? `${ac.id}: Di dalam ${ac.assignedGate || 'Hangar 1'}. Tim teknisi siap melakukan overhaul sistem. Menunggu persetujuan ATC.`
+                  : `${ac.id}: In ${ac.assignedGate || 'Hangar 1'}. Engineering team ready for overhaul. Awaiting ATC work order.`,
+                messageEn: `${ac.id}: In ${ac.assignedGate || 'Hangar 1'}. Engineering team ready for overhaul. Awaiting ATC work order.`,
+                messageId: `${ac.id}: Di dalam ${ac.assignedGate || 'Hangar 1'}. Tim teknisi siap melakukan overhaul sistem. Menunggu persetujuan ATC.`,
                 type: 'info' as const,
               }
               updatedComms = [...updatedComms, arriveHangarMsg]
@@ -1543,14 +1656,21 @@ export const useGameStore = create<GameState>((set, get) => ({
               pendingClearance = 'hangar_release'
               pendingClearanceTitle = 'Izin Rilis Keluar Hangar ke Gate'
               radioSound.speakGroundCrewVoice(
-                `Tower, Hangar Chief. ${ac.id} is certified 100% airworthy. Requesting clearance to release back to gate.`
+                `Tower, Hangar Chief. ${ac.id} is certified 100% airworthy. Requesting clearance to release back to gate.`,
+                state.language === 'id'
+                  ? `Tower, Kepala Hangar. ${ac.id} telah tersertifikasi 100% laik terbang. Meminta izin rilis keluar hangar menuju gate.`
+                  : `Tower, Hangar Chief. ${ac.id} is certified 100% airworthy. Requesting clearance to release back to gate.`
               )
               const releaseReqMsg: CommLogItem = {
                 id: `hangar-ready-${Date.now()}`,
                 timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
                 sender: 'GROUND_CREW' as const,
                 callsign: ac.id,
-                message: `${ac.id}: Perbaikan 100% tuntas. Menunggu izin rilis keluar hangar menuju gate.`,
+                message: state.language === 'id'
+                  ? `${ac.id}: Perbaikan 100% tuntas. Menunggu izin rilis keluar hangar menuju gate.`
+                  : `${ac.id}: Maintenance 100% complete. Requesting clearance to release back to gate.`,
+                messageEn: `${ac.id}: Maintenance 100% complete. Requesting clearance to release back to gate.`,
+                messageId: `${ac.id}: Perbaikan 100% tuntas. Menunggu izin rilis keluar hangar menuju gate.`,
                 type: 'info' as const,
               }
               updatedComms = [...updatedComms, releaseReqMsg]
@@ -1579,14 +1699,21 @@ export const useGameStore = create<GameState>((set, get) => ({
               }
               radioSound.playRogerBeep()
               radioSound.speakGroundCrewVoice(
-                `Tower, Hangar Chief. ${ac.id} overhaul and component replacement completed! All systems recalibrated, airworthiness certified 100%. Requesting clearance to release back to gate.`
+                `Tower, Hangar Chief. ${ac.id} overhaul and component replacement completed! All systems recalibrated, airworthiness certified 100%. Requesting clearance to release back to gate.`,
+                state.language === 'id'
+                  ? `Tower, Kepala Hangar. Overhaul dan penggantian komponen ${ac.id} selesai! Seluruh sistem dikalibrasi ulang, kelaikan terbang tersertifikasi 100%. Meminta izin rilis ke gate.`
+                  : `Tower, Hangar Chief. ${ac.id} overhaul and component replacement completed! All systems recalibrated, airworthiness certified 100%. Requesting clearance to release back to gate.`
               )
               const logMsg: CommLogItem = {
                 id: `hangar-done-${Date.now()}`,
                 timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
                 sender: 'GROUND_CREW' as const,
                 callsign: ac.id,
-                message: `✅ PERBAIKAN TUNTAS: Overhaul selesai pada ${ac.id}. Telemetri dipulihkan 100% normal. Meminta izin rilis ke Gate.`,
+                message: state.language === 'id'
+                  ? `[PERBAIKAN SELESAI] Overhaul tuntas pada ${ac.id}. Telemetri dipulihkan 100% normal. Meminta izin rilis ke Gate.`
+                  : `[MAINTENANCE COMPLETE] Overhaul finished for ${ac.id}. Telemetry restored 100% normal. Requesting gate release.`,
+                messageEn: `[MAINTENANCE COMPLETE] Overhaul finished for ${ac.id}. Telemetry restored 100% normal. Requesting gate release.`,
+                messageId: `[PERBAIKAN SELESAI] Overhaul tuntas pada ${ac.id}. Telemetri dipulihkan 100% normal. Meminta izin rilis ke Gate.`,
                 type: 'info' as const,
               }
               updatedComms = [...updatedComms, logMsg]

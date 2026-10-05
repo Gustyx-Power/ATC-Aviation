@@ -7,6 +7,7 @@ export type RadioRole = 'ATC' | 'PILOT' | 'GROUND_CREW'
 export interface QueuedTransmission {
   role: RadioRole
   text: string
+  displayText?: string
 }
 
 class RadioSoundFX {
@@ -411,52 +412,63 @@ class RadioSoundFX {
    * Convert aircraft flight numbers & aviation abbreviations to natural English aviation radio phonetics
    */
   private formatRadioPhonetics(text: string): string {
+    const digitWords: Record<string, string> = {
+      '0': 'zero',
+      '1': 'one',
+      '2': 'two',
+      '3': 'three',
+      '4': 'four',
+      '5': 'five',
+      '6': 'six',
+      '7': 'seven',
+      '8': 'eight',
+      '9': 'niner',
+    }
+    const spellDigits = (digits: string) =>
+      digits
+        .split('')
+        .map((d) => digitWords[d] || d)
+        .join(' ')
+
     return text
-      .replace(/GIA123/gi, 'Garuda one two three')
-      .replace(/LNI456/gi, 'Lion Air four five six')
-      .replace(/CTV789/gi, 'Citilink seven eight niner')
-      .replace(/BTK204/gi, 'Batik Air two zero four')
-      .replace(/\bFL035\b/gi, 'Flight Level three five')
-      .replace(/\bFL040\b/gi, 'Flight Level four zero')
-      .replace(/\bFL050\b/gi, 'Flight Level five zero')
+      .replace(/\bBTK(\d{3})\b/gi, (_, num) => `Batik Air ${spellDigits(num)}`)
+      .replace(/\bGIA(\d{3})\b/gi, (_, num) => `Garuda ${spellDigits(num)}`)
+      .replace(/\bLNI(\d{3})\b/gi, (_, num) => `Lion Air ${spellDigits(num)}`)
+      .replace(/\bCTV(\d{3})\b/gi, (_, num) => `Citilink ${spellDigits(num)}`)
+      .replace(/\bFL0(\d{2})\b/gi, (_, num) => `Flight Level ${spellDigits(num)}`)
+      .replace(/\bFL(\d{3})\b/gi, (_, num) => `Flight Level ${spellDigits(num)}`)
       .replace(/\bRunway 09\b/gi, 'Runway zero niner')
       .replace(/\bRunway 27\b/gi, 'Runway two seven')
-      .replace(/\bRunway nol sembilan\b/gi, 'Runway zero niner')
-      .replace(/\bRunway dua tujuh\b/gi, 'Runway two seven')
-      .replace(/\bGate 1\b/gi, 'Gate one')
-      .replace(/\bGate 2\b/gi, 'Gate two')
-      .replace(/\bGate 3\b/gi, 'Gate three')
-      .replace(/\bGate 4\b/gi, 'Gate four')
-      .replace(/\bGate 5\b/gi, 'Gate five')
-      .replace(/\bGate 6\b/gi, 'Gate six')
+      .replace(/\bGate (\d+)\b/gi, (_, num) => `Gate ${spellDigits(num)}`)
   }
 
   /**
    * Enqueue ATC tower instruction (Female Voice) into the FIFO radio queue.
    */
-  speakAtcVoice(text: string) {
-    this.enqueueTransmission('ATC', text)
+  speakAtcVoice(text: string, displayText?: string) {
+    this.enqueueTransmission('ATC', text, displayText)
   }
 
   /**
    * Enqueue pilot speech readback (Male Voice) into the FIFO radio queue.
    */
-  speakPilotVoice(text: string) {
-    this.enqueueTransmission('PILOT', text)
+  speakPilotVoice(text: string, displayText?: string) {
+    this.enqueueTransmission('PILOT', text, displayText)
   }
 
   /**
    * Enqueue ground engineer / maintenance crew transmission into the FIFO radio queue.
    */
-  speakGroundCrewVoice(text: string) {
-    this.enqueueTransmission('GROUND_CREW', text)
+  speakGroundCrewVoice(text: string, displayText?: string) {
+    this.enqueueTransmission('GROUND_CREW', text, displayText)
   }
 
-  private enqueueTransmission(role: RadioRole, text: string) {
+  private enqueueTransmission(role: RadioRole, text: string, displayText?: string) {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) return
     if (!text || text.trim().length === 0) return
 
     const trimmed = text.trim()
+    const trimmedDisplay = displayText ? displayText.trim() : trimmed
 
     // Prevent duplicate identical transmissions in queue
     if (this.speechQueue.some((item) => item.role === role && item.text === trimmed)) return
@@ -466,7 +478,7 @@ class RadioSoundFX {
       this.speechQueue.shift()
     }
 
-    const item: QueuedTransmission = { role, text: trimmed }
+    const item: QueuedTransmission = { role, text: trimmed, displayText: trimmedDisplay }
 
     // Emergency transmissions jump to the front of the waiting queue
     if (trimmed.includes('MAYDAY') || trimmed.includes('emergency')) {
@@ -580,7 +592,7 @@ class RadioSoundFX {
     const { role, text } = item
 
     this.currentSpeaker = role
-    this.currentTransmittingText = text
+    this.currentTransmittingText = item.displayText || text
     this.notifySpeakerSubscribers()
 
     try {
