@@ -52,7 +52,8 @@ export type PendingClearanceType =
   | 'takeoff'
   | 'overhaul'
   | 'avionics_check'
-  | 'c_check';
+  | 'c_check'
+  | 'hangar_release';
 
 export interface AircraftTechReport {
   timestamp: string;

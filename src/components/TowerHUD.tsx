@@ -34,6 +34,8 @@ export const TowerHUD: React.FC = () => {
   const denyClearance = useGameStore((state) => state.denyClearance)
   const setSelectedTechReportAircraftId = useGameStore((state) => state.setSelectedTechReportAircraftId)
   const resolveTechVerdict = useGameStore((state) => state.resolveTechVerdict)
+  const startEngineOverhaul = useGameStore((state) => state.startEngineOverhaul)
+  const releaseFromHangar = useGameStore((state) => state.releaseFromHangar)
   const airMiles = useGameStore((state) => state.airMiles)
   const airportLevel = useGameStore((state) => state.airportLevel)
   const score = useGameStore((state) => state.score)
@@ -156,7 +158,20 @@ export const TowerHUD: React.FC = () => {
     isGroundCrewSpeaking ||
     latestPilotMsg?.sender === 'GROUND_CREW' ||
     focusedAircraft?.pendingClearance === 'tech_verdict' ||
-    focusedAircraft?.status === 'maintenance_check'
+    focusedAircraft?.pendingClearance === 'overhaul' ||
+    focusedAircraft?.pendingClearance === 'hangar_release' ||
+    focusedAircraft?.status === 'maintenance_check' ||
+    focusedAircraft?.status === 'in_hangar' ||
+    focusedAircraft?.status === 'overhaul' ||
+    focusedAircraft?.status === 'taxi_to_hangar'
+
+  const isHangarAircraft =
+    focusedAircraft?.status === 'in_hangar' ||
+    focusedAircraft?.status === 'overhaul' ||
+    focusedAircraft?.status === 'avionics_check' ||
+    focusedAircraft?.status === 'c_check' ||
+    focusedAircraft?.status === 'taxi_to_hangar' ||
+    (focusedAircraft?.assignedGate && focusedAircraft.assignedGate.startsWith('Hangar'))
 
   return (
     <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-3 select-none overflow-hidden font-sans text-zinc-100">
@@ -593,22 +608,87 @@ export const TowerHUD: React.FC = () => {
                       selectAircraft(plane.id)
                       setFocusedFlightId(plane.id)
                     }}
-                    className="p-2 rounded bg-zinc-900/80 border border-zinc-800 text-zinc-300 cursor-pointer"
+                    className={`p-2.5 rounded border transition-all cursor-pointer ${
+                      plane.id === focusedAircraft?.id
+                        ? 'bg-amber-950/40 border-amber-500/80 shadow-[0_0_12px_rgba(245,158,11,0.2)]'
+                        : 'bg-zinc-900/80 border-zinc-800 hover:border-zinc-700'
+                    }`}
                   >
                     <div className="flex items-center justify-between font-bold text-zinc-100">
-                      <span>{hangarName} • {plane.id}</span>
-                      <span className="text-amber-400 text-[9px] uppercase">
-                        {plane.status.replace(/_/g, ' ')}
+                      <div className="flex items-center gap-1.5">
+                        <Wrench className="w-3.5 h-3.5 text-amber-400" />
+                        <span>{hangarName} • {plane.id}</span>
+                      </div>
+                      <span
+                        className={`text-[9px] px-1.5 py-0.2 rounded font-bold uppercase ${
+                          plane.status === 'overhaul'
+                            ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse'
+                            : plane.turnaround?.engineOverhauled
+                            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                            : 'bg-zinc-800 text-zinc-300 border border-zinc-700'
+                        }`}
+                      >
+                        {plane.status === 'overhaul'
+                          ? `OVERHAUL ${Math.round(plane.serviceProgress || 0)}%`
+                          : plane.turnaround?.engineOverhauled
+                          ? 'KLAIKAN 100%'
+                          : plane.status.replace(/_/g, ' ')}
                       </span>
                     </div>
-                    {plane.serviceProgress !== undefined && plane.serviceProgress > 0 && (
-                      <div className="w-full bg-zinc-800 h-1.5 rounded-full overflow-hidden mt-1">
-                        <div
-                          className="bg-amber-400 h-full"
-                          style={{ width: `${plane.serviceProgress}%` }}
-                        />
+
+                    {plane.emergencyReason && (
+                      <p className="text-[10px] text-rose-300 italic font-mono mt-1 bg-rose-950/30 p-1 rounded border border-rose-900/40">
+                        ⚠️ Anomali: {plane.emergencyReason}
+                      </p>
+                    )}
+
+                    {plane.status === 'overhaul' && (
+                      <div className="mt-1.5">
+                        <div className="flex justify-between text-[9px] text-zinc-400 font-mono mb-0.5">
+                          <span>Progres Pembongkaran & Penggantian:</span>
+                          <span className="text-amber-400 font-bold">{Math.round(plane.serviceProgress || 0)}%</span>
+                        </div>
+                        <div className="w-full bg-zinc-950 h-2 rounded-full overflow-hidden border border-zinc-800">
+                          <div
+                            className="bg-gradient-to-r from-amber-500 to-emerald-400 h-full transition-all duration-300"
+                            style={{ width: `${plane.serviceProgress}%` }}
+                          />
+                        </div>
                       </div>
                     )}
+
+                    {/* Interactive Hangar Actions */}
+                    <div className="mt-2 pt-1.5 border-t border-zinc-800/80 flex items-center gap-1.5">
+                      {plane.status === 'in_hangar' && !plane.turnaround?.engineOverhauled && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            selectAircraft(plane.id)
+                            setFocusedFlightId(plane.id)
+                            startEngineOverhaul(plane.id)
+                          }}
+                          className="flex-1 py-1 px-2 rounded bg-amber-600 hover:bg-amber-500 text-white font-mono font-bold text-[10px] shadow cursor-pointer transition-all flex items-center justify-center gap-1"
+                        >
+                          <Wrench className="w-3 h-3" />
+                          <span>Mulai Overhaul & Perbaikan</span>
+                        </button>
+                      )}
+
+                      {plane.status === 'in_hangar' && plane.turnaround?.engineOverhauled && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            selectAircraft(plane.id)
+                            setFocusedFlightId(plane.id)
+                            approveClearance(plane.id)
+                          }}
+                          className="flex-1 py-1 px-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-mono font-bold text-[10px] shadow cursor-pointer transition-all flex items-center justify-center gap-1"
+                        >
+                          <Check className="w-3 h-3" />
+                          <span>Rilis Pesawat ke Gate</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
                 )
               })}
@@ -955,6 +1035,29 @@ export const TowerHUD: React.FC = () => {
               )}
             </div>
           )}
+
+          {/* Quick Hangar Action Bar: if focused aircraft is in Hangar and waiting */}
+          {!focusedAircraft?.pendingClearance && isHangarAircraft && (
+            <div className="flex items-center gap-2 mt-2.5 pt-2 border-t border-zinc-800">
+              {focusedAircraft.turnaround?.engineOverhauled ? (
+                <button
+                  onClick={() => releaseFromHangar(focusedAircraft.id)}
+                  className="flex-1 py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-mono font-bold text-xs shadow-lg cursor-pointer transition-all flex items-center justify-center gap-2 animate-pulse"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>RILIS [{focusedAircraft.id}] DARI HANGAR MENUJU GATE (Kelaikan 100%)</span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => startEngineOverhaul(focusedAircraft.id)}
+                  className="flex-1 py-2 px-3 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-mono font-bold text-xs shadow-lg cursor-pointer transition-all flex items-center justify-center gap-2 animate-pulse"
+                >
+                  <Wrench className="w-4 h-4" />
+                  <span>MULAI OVERHAUL & PERBAIKAN KOMPONEN [{focusedAircraft.id}]</span>
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* BOTTOM RACK: CAMERAS (LEFT) + 1-BY-1 TURNAROUND FOCUSED STRIP (CENTER) + PTT (RIGHT) */}
@@ -1020,153 +1123,244 @@ export const TowerHUD: React.FC = () => {
                   </span>
                 </div>
                 <div className="text-[10px] text-zinc-400">
-                  Fokus Kontrol ATC 1-per-1
+                  {isHangarAircraft ? 'Pemeliharaan Berat Hangar' : 'Fokus Kontrol ATC 1-per-1'}
                 </div>
               </div>
 
-              {/* Turnaround Sequence Steps Bar (1 through 8) */}
-              <div className="grid grid-cols-8 gap-1 text-center text-[9px]">
-                {/* 1. Deboarding */}
-                <div
-                  className={`p-1 rounded border ${
-                    focusedAircraft.turnaround?.deboarded
-                      ? 'bg-emerald-950/40 border-emerald-500/60 text-emerald-300'
-                      : focusedAircraft.status === 'deboarding'
-                      ? 'bg-sky-950/60 border-sky-400 text-sky-200 animate-pulse'
-                      : 'bg-zinc-900 border-zinc-800 text-zinc-500'
-                  }`}
-                >
-                  <span className="block font-bold">1. Turun Pax</span>
-                  <span>{focusedAircraft.turnaround?.deboarded ? '✓' : '○'}</span>
-                </div>
+              {isHangarAircraft ? (
+                /* Hangar Overhaul Pipeline Steps (5 Steps) */
+                <div className="grid grid-cols-5 gap-1.5 text-center text-[9px]">
+                  {/* 1. Hangar Bay */}
+                  <div className="p-1 rounded border bg-emerald-950/40 border-emerald-500/60 text-emerald-300">
+                    <span className="block font-bold">1. Masuk Bay</span>
+                    <span>✓ Docked</span>
+                  </div>
 
-                {/* 2. Cleaning */}
-                <div
-                  className={`p-1 rounded border ${
-                    focusedAircraft.turnaround?.cabinCleaned
-                      ? 'bg-emerald-950/40 border-emerald-500/60 text-emerald-300'
-                      : focusedAircraft.status === 'cleaning'
-                      ? 'bg-sky-950/60 border-sky-400 text-sky-200 animate-pulse'
-                      : 'bg-zinc-900 border-zinc-800 text-zinc-500'
-                  }`}
-                >
-                  <span className="block font-bold">2. Kabin</span>
-                  <span>{focusedAircraft.turnaround?.cabinCleaned ? '✓' : '○'}</span>
-                </div>
+                  {/* 2. Diagnosa Rusak */}
+                  <div
+                    onClick={() => {
+                      if (focusedAircraft.techReport) {
+                        setSelectedTechReportAircraftId(focusedAircraft.id)
+                      }
+                    }}
+                    className={`p-1 rounded border ${
+                      focusedAircraft.emergencyReason
+                        ? 'bg-rose-950/40 border-rose-500/60 text-rose-300'
+                        : 'bg-emerald-950/40 border-emerald-500/60 text-emerald-300'
+                    } ${focusedAircraft.techReport ? 'cursor-pointer hover:border-amber-400' : ''}`}
+                    title={focusedAircraft.emergencyReason || 'Sistem Diperiksa Teknis'}
+                  >
+                    <span className="block font-bold">2. Diagnosa</span>
+                    <span className="truncate block">
+                      {focusedAircraft.emergencyReason ? '⚠️ Ada Cacat' : '✓ Diinspeksi'}
+                    </span>
+                  </div>
 
-                {/* 3. Refueling */}
-                <div
-                  className={`p-1 rounded border ${
-                    focusedAircraft.turnaround?.refueled
-                      ? 'bg-emerald-950/40 border-emerald-500/60 text-emerald-300'
-                      : focusedAircraft.status === 'refueling'
-                      ? 'bg-sky-950/60 border-sky-400 text-sky-200 animate-pulse'
-                      : 'bg-zinc-900 border-zinc-800 text-zinc-500'
-                  }`}
-                >
-                  <span className="block font-bold">3. Avtur</span>
-                  <span>{focusedAircraft.turnaround?.refueled ? '✓' : '○'}</span>
-                </div>
+                  {/* 3. Overhaul Mesin/Sistem */}
+                  <div
+                    onClick={() => {
+                      if (focusedAircraft.status === 'in_hangar' && !focusedAircraft.turnaround?.engineOverhauled) {
+                        startEngineOverhaul(focusedAircraft.id)
+                      }
+                    }}
+                    className={`p-1 rounded border transition-all ${
+                      focusedAircraft.turnaround?.engineOverhauled
+                        ? 'bg-emerald-950/40 border-emerald-500/60 text-emerald-300'
+                        : focusedAircraft.status === 'overhaul'
+                        ? 'bg-amber-950/70 border-amber-400 text-amber-200 animate-pulse font-bold'
+                        : 'bg-amber-900/40 border-amber-600/60 text-amber-300 hover:border-amber-400 cursor-pointer font-bold'
+                    }`}
+                    title="Mulai atau tinjau progres overhaul turbofan & hidrolik"
+                  >
+                    <span className="block font-bold">3. Overhaul Mesin</span>
+                    <span>
+                      {focusedAircraft.turnaround?.engineOverhauled
+                        ? '✓ Selesai'
+                        : focusedAircraft.status === 'overhaul'
+                        ? `${Math.round(focusedAircraft.serviceProgress || 0)}%`
+                        : '⚙️ Klik Mulai'}
+                    </span>
+                  </div>
 
-                {/* 4. Tech Check */}
-                <div
-                  onClick={() => {
-                    if (focusedAircraft.techReport) {
-                      setSelectedTechReportAircraftId(focusedAircraft.id)
+                  {/* 4. Sertifikasi Uji Kelaikan */}
+                  <div
+                    className={`p-1 rounded border ${
+                      focusedAircraft.turnaround?.engineOverhauled
+                        ? 'bg-emerald-950/40 border-emerald-500/60 text-emerald-300'
+                        : 'bg-zinc-900 border-zinc-800 text-zinc-500'
+                    }`}
+                  >
+                    <span className="block font-bold">4. Kelaikan 100%</span>
+                    <span>
+                      {focusedAircraft.turnaround?.engineOverhauled ? '✓ Lolos Uji' : '○ Kalibrasi'}
+                    </span>
+                  </div>
+
+                  {/* 5. Rilis ke Gate */}
+                  <div
+                    onClick={() => {
+                      if (focusedAircraft.turnaround?.engineOverhauled) {
+                        releaseFromHangar(focusedAircraft.id)
+                      }
+                    }}
+                    className={`p-1 rounded border transition-all ${
+                      focusedAircraft.turnaround?.engineOverhauled
+                        ? 'bg-sky-950/70 border-sky-400 text-sky-200 hover:border-sky-300 cursor-pointer animate-pulse font-bold'
+                        : 'bg-zinc-900 border-zinc-800 text-zinc-500'
+                    }`}
+                    title="Rilis pesawat keluar hangar dan taksi ke gate penjemputan penumpang"
+                  >
+                    <span className="block font-bold">5. Rilis ke Gate</span>
+                    <span>
+                      {focusedAircraft.turnaround?.engineOverhauled ? '🚪 Klik Rilis' : '○ Menunggu'}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                /* Turnaround Sequence Steps Bar (1 through 8) */
+                <div className="grid grid-cols-8 gap-1 text-center text-[9px]">
+                  {/* 1. Deboarding */}
+                  <div
+                    className={`p-1 rounded border ${
+                      focusedAircraft.turnaround?.deboarded
+                        ? 'bg-emerald-950/40 border-emerald-500/60 text-emerald-300'
+                        : focusedAircraft.status === 'deboarding'
+                        ? 'bg-sky-950/60 border-sky-400 text-sky-200 animate-pulse'
+                        : 'bg-zinc-900 border-zinc-800 text-zinc-500'
+                    }`}
+                  >
+                    <span className="block font-bold">1. Turun Pax</span>
+                    <span>{focusedAircraft.turnaround?.deboarded ? '✓' : '○'}</span>
+                  </div>
+
+                  {/* 2. Cleaning */}
+                  <div
+                    className={`p-1 rounded border ${
+                      focusedAircraft.turnaround?.cabinCleaned
+                        ? 'bg-emerald-950/40 border-emerald-500/60 text-emerald-300'
+                        : focusedAircraft.status === 'cleaning'
+                        ? 'bg-sky-950/60 border-sky-400 text-sky-200 animate-pulse'
+                        : 'bg-zinc-900 border-zinc-800 text-zinc-500'
+                    }`}
+                  >
+                    <span className="block font-bold">2. Kabin</span>
+                    <span>{focusedAircraft.turnaround?.cabinCleaned ? '✓' : '○'}</span>
+                  </div>
+
+                  {/* 3. Refueling */}
+                  <div
+                    className={`p-1 rounded border ${
+                      focusedAircraft.turnaround?.refueled
+                        ? 'bg-emerald-950/40 border-emerald-500/60 text-emerald-300'
+                        : focusedAircraft.status === 'refueling'
+                        ? 'bg-sky-950/60 border-sky-400 text-sky-200 animate-pulse'
+                        : 'bg-zinc-900 border-zinc-800 text-zinc-500'
+                    }`}
+                  >
+                    <span className="block font-bold">3. Avtur</span>
+                    <span>{focusedAircraft.turnaround?.refueled ? '✓' : '○'}</span>
+                  </div>
+
+                  {/* 4. Tech Check */}
+                  <div
+                    onClick={() => {
+                      if (focusedAircraft.techReport) {
+                        setSelectedTechReportAircraftId(focusedAircraft.id)
+                      }
+                    }}
+                    className={`p-1 rounded border transition-all ${
+                      focusedAircraft.techReport ? 'cursor-pointer hover:border-amber-400' : ''
+                    } ${
+                      focusedAircraft.turnaround?.techInspected
+                        ? 'bg-emerald-950/40 border-emerald-500/60 text-emerald-300'
+                        : focusedAircraft.pendingClearance === 'tech_verdict'
+                        ? 'bg-amber-950/70 border-amber-400 text-amber-200 animate-pulse font-bold'
+                        : focusedAircraft.status === 'maintenance_check'
+                        ? 'bg-sky-950/60 border-sky-400 text-sky-200 animate-pulse'
+                        : 'bg-zinc-900 border-zinc-800 text-zinc-500'
+                    }`}
+                    title={
+                      focusedAircraft.techReport
+                        ? 'Klik untuk membuka lembar statistik telemetri teknisi'
+                        : 'Pemeriksaan teknis kelaikan udara'
                     }
-                  }}
-                  className={`p-1 rounded border transition-all ${
-                    focusedAircraft.techReport ? 'cursor-pointer hover:border-amber-400' : ''
-                  } ${
-                    focusedAircraft.turnaround?.techInspected
-                      ? 'bg-emerald-950/40 border-emerald-500/60 text-emerald-300'
-                      : focusedAircraft.pendingClearance === 'tech_verdict'
-                      ? 'bg-amber-950/70 border-amber-400 text-amber-200 animate-pulse font-bold'
-                      : focusedAircraft.status === 'maintenance_check'
-                      ? 'bg-sky-950/60 border-sky-400 text-sky-200 animate-pulse'
-                      : 'bg-zinc-900 border-zinc-800 text-zinc-500'
-                  }`}
-                  title={
-                    focusedAircraft.techReport
-                      ? 'Klik untuk membuka lembar statistik telemetri teknisi'
-                      : 'Pemeriksaan teknis kelaikan udara'
-                  }
-                >
-                  <span className="block font-bold">4. Teknis</span>
-                  <span>
-                    {focusedAircraft.turnaround?.techInspected
-                      ? '✓'
-                      : focusedAircraft.pendingClearance === 'tech_verdict'
-                      ? '📋 Data'
-                      : '○'}
-                  </span>
-                </div>
+                  >
+                    <span className="block font-bold">4. Teknis</span>
+                    <span>
+                      {focusedAircraft.turnaround?.techInspected
+                        ? '✓'
+                        : focusedAircraft.pendingClearance === 'tech_verdict'
+                        ? '📋 Data'
+                        : '○'}
+                    </span>
+                  </div>
 
-                {/* 5. Boarding */}
-                <div
-                  className={`p-1 rounded border ${
-                    focusedAircraft.turnaround?.boarded
-                      ? 'bg-emerald-950/40 border-emerald-500/60 text-emerald-300'
-                      : focusedAircraft.status === 'boarding'
-                      ? 'bg-sky-950/60 border-sky-400 text-sky-200 animate-pulse'
-                      : 'bg-zinc-900 border-zinc-800 text-zinc-500'
-                  }`}
-                >
-                  <span className="block font-bold">5. Boarding</span>
-                  <span>{focusedAircraft.turnaround?.boarded ? '✓' : '○'}</span>
-                </div>
+                  {/* 5. Boarding */}
+                  <div
+                    className={`p-1 rounded border ${
+                      focusedAircraft.turnaround?.boarded
+                        ? 'bg-emerald-950/40 border-emerald-500/60 text-emerald-300'
+                        : focusedAircraft.status === 'boarding'
+                        ? 'bg-sky-950/60 border-sky-400 text-sky-200 animate-pulse'
+                        : 'bg-zinc-900 border-zinc-800 text-zinc-500'
+                    }`}
+                  >
+                    <span className="block font-bold">5. Boarding</span>
+                    <span>{focusedAircraft.turnaround?.boarded ? '✓' : '○'}</span>
+                  </div>
 
-                {/* 6. Pushback */}
-                <div
-                  className={`p-1 rounded border ${
-                    focusedAircraft.status === 'pushback' ||
-                    focusedAircraft.status === 'taxi_to_runway' ||
-                    focusedAircraft.status === 'takeoff' ||
-                    focusedAircraft.status === 'airborne'
-                      ? 'bg-emerald-950/40 border-emerald-500/60 text-emerald-300'
-                      : 'bg-zinc-900 border-zinc-800 text-zinc-500'
-                  }`}
-                >
-                  <span className="block font-bold">6. Pushback</span>
-                  <span>
-                    {focusedAircraft.status === 'taxi_to_runway' ||
-                    focusedAircraft.status === 'takeoff' ||
-                    focusedAircraft.status === 'airborne'
-                      ? '✓'
-                      : '○'}
-                  </span>
-                </div>
+                  {/* 6. Pushback */}
+                  <div
+                    className={`p-1 rounded border ${
+                      focusedAircraft.status === 'pushback' ||
+                      focusedAircraft.status === 'taxi_to_runway' ||
+                      focusedAircraft.status === 'takeoff' ||
+                      focusedAircraft.status === 'airborne'
+                        ? 'bg-emerald-950/40 border-emerald-500/60 text-emerald-300'
+                        : 'bg-zinc-900 border-zinc-800 text-zinc-500'
+                    }`}
+                  >
+                    <span className="block font-bold">6. Pushback</span>
+                    <span>
+                      {focusedAircraft.status === 'taxi_to_runway' ||
+                      focusedAircraft.status === 'takeoff' ||
+                      focusedAircraft.status === 'airborne'
+                        ? '✓'
+                        : '○'}
+                    </span>
+                  </div>
 
-                {/* 7. Taxi to Rwy */}
-                <div
-                  className={`p-1 rounded border ${
-                    focusedAircraft.status === 'taxi_to_runway' ||
-                    focusedAircraft.status === 'takeoff' ||
-                    focusedAircraft.status === 'airborne'
-                      ? 'bg-emerald-950/40 border-emerald-500/60 text-emerald-300'
-                      : 'bg-zinc-900 border-zinc-800 text-zinc-500'
-                  }`}
-                >
-                  <span className="block font-bold">7. Taksi Rwy</span>
-                  <span>
-                    {focusedAircraft.status === 'takeoff' || focusedAircraft.status === 'airborne'
-                      ? '✓'
-                      : '○'}
-                  </span>
-                </div>
+                  {/* 7. Taxi to Rwy */}
+                  <div
+                    className={`p-1 rounded border ${
+                      focusedAircraft.status === 'taxi_to_runway' ||
+                      focusedAircraft.status === 'takeoff' ||
+                      focusedAircraft.status === 'airborne'
+                        ? 'bg-emerald-950/40 border-emerald-500/60 text-emerald-300'
+                        : 'bg-zinc-900 border-zinc-800 text-zinc-500'
+                    }`}
+                  >
+                    <span className="block font-bold">7. Taksi Rwy</span>
+                    <span>
+                      {focusedAircraft.status === 'takeoff' || focusedAircraft.status === 'airborne'
+                        ? '✓'
+                        : '○'}
+                    </span>
+                  </div>
 
-                {/* 8. Takeoff */}
-                <div
-                  className={`p-1 rounded border ${
-                    focusedAircraft.status === 'takeoff' || focusedAircraft.status === 'airborne'
-                      ? 'bg-emerald-950/40 border-emerald-500/60 text-emerald-300'
-                      : 'bg-zinc-900 border-zinc-800 text-zinc-500'
-                  }`}
-                >
-                  <span className="block font-bold">8. Lepas</span>
-                  <span>{focusedAircraft.status === 'airborne' ? '✓' : '○'}</span>
+                  {/* 8. Takeoff */}
+                  <div
+                    className={`p-1 rounded border ${
+                      focusedAircraft.status === 'takeoff' || focusedAircraft.status === 'airborne'
+                        ? 'bg-emerald-950/40 border-emerald-500/60 text-emerald-300'
+                        : 'bg-zinc-900 border-zinc-800 text-zinc-500'
+                    }`}
+                  >
+                    <span className="block font-bold">8. Lepas</span>
+                    <span>{focusedAircraft.status === 'airborne' ? '✓' : '○'}</span>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           ) : null}
 

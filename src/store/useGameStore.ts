@@ -187,6 +187,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       get().startAvionicsCheck(id)
     } else if (clearance === 'c_check') {
       get().startCCheck(id)
+    } else if (clearance === 'hangar_release') {
+      get().releaseFromHangar(id)
     }
 
     set((s) => ({
@@ -913,12 +915,22 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   startEngineOverhaul: (id: string) => {
     radioSound.playRogerBeep()
-    atcInstruction(`${id}, engine overhaul approved in Hangar 1.`)
-    pilotReadback(`${id}, hangar maintenance commencing turbofan engine overhaul.`)
+    const ac = get().aircrafts.find((a) => a.id === id)
+    const defectInfo = ac?.emergencyReason ? ` (${ac.emergencyReason})` : ''
+    atcInstruction(`${id}, heavy overhaul and component repair approved in Hangar.`)
+    radioSound.speakGroundCrewVoice(`${id}, copied Tower. Hangar team commencing turbofan core overhaul and component replacement.`)
 
     set((state) => ({
       aircrafts: state.aircrafts.map((ac) =>
-        ac.id === id ? { ...ac, status: 'overhaul', serviceProgress: 0 } : ac
+        ac.id === id
+          ? {
+              ...ac,
+              status: 'overhaul',
+              serviceProgress: 0,
+              pendingClearance: undefined,
+              pendingClearanceTitle: undefined,
+            }
+          : ac
       ),
       commsLog: [
         ...state.commsLog,
@@ -927,18 +939,18 @@ export const useGameStore = create<GameState>((set, get) => ({
           timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
           sender: 'GROUND_CREW' as const,
           callsign: id,
-          message: `Hangar engineering team started engine core teardown and turbine overhaul on ${id}.`,
+          message: `Tim mekanik hangar memulai overhaul sistem dan penggantian suku cadang pada ${id}${defectInfo}.`,
           type: 'info' as const,
         },
       ].slice(-50),
-      tutorialText: `Mesin ${id} sedang di-overhaul di hangar. Tunggu teknisi menyelesaikan pengetesan turbin!`,
+      tutorialText: `Sistem ${id} sedang di-overhaul di hangar. Teknisi sedang membongkar dan mengganti komponen!`,
     }))
   },
 
   startAvionicsCheck: (id: string) => {
     radioSound.playRogerBeep()
     atcInstruction(`${id}, avionics inspection approved in Hangar 2.`)
-    pilotReadback(`${id}, calibrating avionics, transponder, and flight guidance systems.`)
+    radioSound.speakGroundCrewVoice(`${id}, calibrating avionics, transponder, and flight guidance systems.`)
 
     set((state) => ({
       aircrafts: state.aircrafts.map((ac) =>
@@ -962,7 +974,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   startCCheck: (id: string) => {
     radioSound.playRogerBeep()
     atcInstruction(`${id}, heavy C-Check inspection approved in hangar.`)
-    pilotReadback(`${id}, commencing heavy C-Check structural and hydraulic inspection.`)
+    radioSound.speakGroundCrewVoice(`${id}, commencing heavy C-Check structural and hydraulic inspection.`)
 
     set((state) => ({
       aircrafts: state.aircrafts.map((ac) =>
@@ -985,26 +997,43 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   releaseFromHangar: (id: string, targetGate?: 'Gate 1' | 'Gate 2' | 'Gate 3' | 'Gate 4' | 'Gate 5' | 'Gate 6') => {
     radioSound.playRogerBeep()
-    const gate = targetGate || 'Gate 3'
-    atcInstruction(`${id}, hangar release approved, taxi via Alpha to ${gate}.`)
-    pilotReadback(`${id}, hangar service complete, aircraft airworthy, taxiing to ${gate}.`)
+    const occupied = new Set(
+      get().aircrafts
+        .filter((a) => a.id !== id && a.status !== 'takeoff' && a.status !== 'airborne')
+        .map((a) => a.assignedGate || a.gate)
+        .filter(Boolean)
+    )
+    const availableGate =
+      targetGate ||
+      ((['Gate 1', 'Gate 2', 'Gate 3', 'Gate 4', 'Gate 5', 'Gate 6'] as const).find(
+        (g) => !occupied.has(g)
+      ) || 'Gate 1')
+
+    atcInstruction(`${id}, hangar release approved, taxi via Alpha to ${availableGate}.`)
+    radioSound.speakGroundCrewVoice(`${id}, copied Tower. Hangar tug pushing aircraft out, taxiing via Alpha to ${availableGate}.`)
 
     set((state) => ({
+      airMiles: state.airMiles + 20,
+      score: state.score + 50,
       aircrafts: state.aircrafts.map((ac) =>
         ac.id === id
           ? {
               ...ac,
               status: 'taxi_to_gate',
-              assignedGate: gate,
-              gate: gate,
+              assignedGate: availableGate,
+              gate: availableGate,
               technicalHealth: 100,
               fuel: 100,
+              serviceProgress: 0,
+              pendingClearance: undefined,
+              pendingClearanceTitle: undefined,
               turnaround: {
                 deboarded: true,
                 cabinCleaned: true,
                 refueled: true,
                 techInspected: true,
                 boarded: false,
+                engineOverhauled: true,
               },
             }
           : ac
@@ -1016,11 +1045,11 @@ export const useGameStore = create<GameState>((set, get) => ({
           timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
           sender: 'GROUND_CREW' as const,
           callsign: id,
-          message: `${id} released from maintenance hangar with 100% airworthiness certificate. Taxiing to ${gate}.`,
+          message: `✈️ RILIS HANGAR: ${id} selesai di-overhaul, kelaikan 100%. Bergerak menuju ${availableGate} untuk muat penumpang.`,
           type: 'info' as const,
         },
       ].slice(-50),
-      tutorialText: `${id} telah dirilis dari hangar dan taksi ke ${gate}. Siap untuk boarding penumpang!`,
+      tutorialText: `${id} telah dirilis dari hangar dengan kelaikan 100% dan menuju ${availableGate}!`,
     }))
   },
 
@@ -1436,37 +1465,76 @@ export const useGameStore = create<GameState>((set, get) => ({
             }
           }
 
-          // Hangar Maintenance Stages: OVERHAUL, AVIONICS, C_CHECK (~42 seconds)
+          // Phase: IN HANGAR IDLE CHECK (Auto-request overhaul or release if not already pending)
+          if (status === 'in_hangar' && !pendingClearance) {
+            if (!ac.turnaround?.engineOverhauled) {
+              pendingClearance = 'overhaul'
+              pendingClearanceTitle = 'Izin Overhaul & Perbaikan Berat Hangar'
+              radioSound.speakGroundCrewVoice(
+                `Jakarta Tower, Hangar Maintenance. ${ac.id} is docked in ${ac.assignedGate || 'Hangar 1'}. Engineering team ready to start component overhaul. Standing by for work order clearance.`
+              )
+              const arriveHangarMsg: CommLogItem = {
+                id: `hangar-dock-${Date.now()}`,
+                timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
+                sender: 'GROUND_CREW' as const,
+                callsign: ac.id,
+                message: `${ac.id}: Di dalam ${ac.assignedGate || 'Hangar 1'}. Tim teknisi siap melakukan overhaul sistem. Menunggu persetujuan ATC.`,
+                type: 'info' as const,
+              }
+              updatedComms = [...updatedComms, arriveHangarMsg]
+              return {
+                ...ac,
+                pendingClearance,
+                pendingClearanceTitle,
+              }
+            } else {
+              pendingClearance = 'hangar_release'
+              pendingClearanceTitle = 'Izin Rilis Keluar Hangar ke Gate'
+              radioSound.speakGroundCrewVoice(
+                `Tower, Hangar Chief. ${ac.id} is certified 100% airworthy. Requesting clearance to release back to gate.`
+              )
+              const releaseReqMsg: CommLogItem = {
+                id: `hangar-ready-${Date.now()}`,
+                timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
+                sender: 'GROUND_CREW' as const,
+                callsign: ac.id,
+                message: `${ac.id}: Perbaikan 100% tuntas. Menunggu izin rilis keluar hangar menuju gate.`,
+                type: 'info' as const,
+              }
+              updatedComms = [...updatedComms, releaseReqMsg]
+              return {
+                ...ac,
+                pendingClearance,
+                pendingClearanceTitle,
+              }
+            }
+          }
+
+          // Hangar Maintenance Stages: OVERHAUL, AVIONICS, C_CHECK (~30 seconds)
           if (status === 'overhaul' || status === 'avionics_check' || status === 'c_check') {
-            const stepRate = 0.040 * (state.simSpeed || 1)
+            const stepRate = 0.055 * (state.simSpeed || 1)
             if (serviceProg < 100) {
               serviceProg = Math.min(100, serviceProg + stepRate)
               return { ...ac, serviceProgress: serviceProg }
             } else {
-              const completedService = status
               status = 'in_hangar'
               const turnaround = {
                 ...(ac.turnaround || {}),
-                engineOverhauled: completedService === 'overhaul' ? true : ac.turnaround?.engineOverhauled,
-                avionicsCalibrated: completedService === 'avionics_check' ? true : ac.turnaround?.avionicsCalibrated,
-                cCheckPassed: completedService === 'c_check' ? true : ac.turnaround?.cCheckPassed,
+                engineOverhauled: true,
+                avionicsCalibrated: true,
+                cCheckPassed: true,
+                techInspected: true,
               }
               radioSound.playRogerBeep()
-              const stepName =
-                completedService === 'overhaul'
-                  ? 'Engine overhaul'
-                  : completedService === 'avionics_check'
-                  ? 'Avionics calibration'
-                  : 'C-Check inspection'
-              if (ac.id === state.focusedFlightId) {
-                pilotReadback(`${ac.id}, ${stepName.toLowerCase()} completed, systems nominal and certified airworthy.`)
-              }
+              radioSound.speakGroundCrewVoice(
+                `Tower, Hangar Chief. ${ac.id} overhaul and component replacement completed! All systems recalibrated, airworthiness certified 100%. Requesting clearance to release back to gate.`
+              )
               const logMsg: CommLogItem = {
                 id: `hangar-done-${Date.now()}`,
                 timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
                 sender: 'GROUND_CREW' as const,
                 callsign: ac.id,
-                message: `${stepName} completed on ${ac.id}. Systems verified 100% operational.`,
+                message: `✅ PERBAIKAN TUNTAS: Overhaul selesai pada ${ac.id}. Telemetri dipulihkan 100% normal. Meminta izin rilis ke Gate.`,
                 type: 'info' as const,
               }
               updatedComms = [...updatedComms, logMsg]
@@ -1475,9 +1543,11 @@ export const useGameStore = create<GameState>((set, get) => ({
                 status: 'in_hangar',
                 serviceProgress: 100,
                 technicalHealth: 100,
+                techReport: undefined,
+                emergencyReason: undefined,
                 turnaround,
-                pendingClearance: undefined,
-                pendingClearanceTitle: undefined,
+                pendingClearance: 'hangar_release',
+                pendingClearanceTitle: 'Izin Rilis Keluar Hangar ke Gate',
               }
             }
           }
@@ -1510,21 +1580,46 @@ export const useGameStore = create<GameState>((set, get) => ({
               pos = { x: targetPos.x, y: 0.1, z: targetPos.z }
               heading = isHangar ? 180 : 0
               if (!isHangar) {
-                // Request Deboarding clearance when parked at gate!
-                pendingClearance = 'deboarding'
-                pendingClearanceTitle = 'Izin Penurunan Penumpang (Deboarding)'
-                if (ac.id === state.focusedFlightId) {
-                  pilotReadback(`${ac.id}, on blocks at ${destName}, engines shutdown, requesting deboarding clearance.`)
+                if (ac.turnaround?.deboarded && ac.turnaround?.techInspected) {
+                  // Plane came from hangar, ready for boarding
+                  pendingClearance = 'boarding'
+                  pendingClearanceTitle = 'Izin Menaikkan Penumpang (Boarding)'
+                  radioSound.speakPilotVoice(
+                    `${ac.id}, docked at ${destName}, cabin prepped and certified airworthy. Requesting boarding clearance.`
+                  )
+                } else {
+                  // Regular arrival from runway, request deboarding
+                  pendingClearance = 'deboarding'
+                  pendingClearanceTitle = 'Izin Penurunan Penumpang (Deboarding)'
+                  if (ac.id === state.focusedFlightId) {
+                    pilotReadback(`${ac.id}, on blocks at ${destName}, engines shutdown, requesting deboarding clearance.`)
+                  }
                 }
                 const arriveMsg: CommLogItem = {
                   id: `dock-${Date.now()}`,
                   timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
                   sender: 'PILOT' as const,
                   callsign: ac.id,
-                  message: `${ac.id}: Docked at ${destName}, engines shutdown. Requesting deboarding clearance.`,
+                  message: `${ac.id}: Docked at ${destName}. Requesting ${pendingClearanceTitle}.`,
                   type: 'info' as const,
                 }
                 updatedComms = [...updatedComms, arriveMsg]
+              } else {
+                // Arrived in Hangar!
+                pendingClearance = 'overhaul'
+                pendingClearanceTitle = 'Izin Overhaul & Perbaikan Berat Hangar'
+                radioSound.speakGroundCrewVoice(
+                  `Jakarta Tower, Hangar Maintenance. ${ac.id} is docked in ${destName}. Engineering team ready to start component overhaul and repairs. Standing by for work order clearance.`
+                )
+                const arriveHangarMsg: CommLogItem = {
+                  id: `hangar-dock-${Date.now()}`,
+                  timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
+                  sender: 'GROUND_CREW' as const,
+                  callsign: ac.id,
+                  message: `${ac.id}: Masuk ${destName}. Tim teknisi siap melakukan pembongkaran dan perbaikan sistem. Menunggu izin instruksi ATC.`,
+                  type: 'info' as const,
+                }
+                updatedComms = [...updatedComms, arriveHangarMsg]
               }
             }
 
