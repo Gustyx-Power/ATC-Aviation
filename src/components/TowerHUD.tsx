@@ -23,6 +23,7 @@ import {
 import { useGameStore } from '../store/useGameStore'
 import { useVoiceCommand } from '../hooks/useVoiceCommand'
 import { radioSound } from '../utils/audioEffects'
+import { ANOMALY_OPTIONS } from '../utils/techDiagnostics'
 
 export const TowerHUD: React.FC = () => {
   const aircrafts = useGameStore((state) => state.aircrafts)
@@ -636,11 +637,63 @@ export const TowerHUD: React.FC = () => {
                       </span>
                     </div>
 
-                    {plane.emergencyReason && (
+                    {/* Anomaly / Suspect Information / Teardown Results */}
+                    {plane.hangarDiagnosisResult ? (
+                      <div
+                        className={`mt-1.5 p-1.5 rounded border text-[10px] font-mono ${
+                          plane.hangarDiagnosisResult.verdict === 'perfect'
+                            ? 'bg-emerald-950/60 border-emerald-500/70 text-emerald-200'
+                            : plane.hangarDiagnosisResult.verdict === 'partial'
+                            ? 'bg-amber-950/60 border-amber-500/70 text-amber-200'
+                            : 'bg-rose-950/60 border-rose-500/70 text-rose-200'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between font-bold">
+                          <span>
+                            {plane.hangarDiagnosisResult.verdict === 'perfect' && '🏆 TEARDOWN: TEPAT'}
+                            {plane.hangarDiagnosisResult.verdict === 'partial' && '⚡ TEARDOWN: SEBAGIAN'}
+                            {plane.hangarDiagnosisResult.verdict === 'wrong' && '❌ TEARDOWN: SALAH VONIS'}
+                          </span>
+                          <span
+                            className={
+                              plane.hangarDiagnosisResult.scoreChange >= 0
+                                ? 'text-emerald-400 font-bold'
+                                : 'text-rose-400 font-bold'
+                            }
+                          >
+                            {plane.hangarDiagnosisResult.scoreChange >= 0
+                              ? `+${plane.hangarDiagnosisResult.scoreChange}`
+                              : plane.hangarDiagnosisResult.scoreChange}{' '}
+                            Skor
+                          </span>
+                        </div>
+                        <p className="mt-0.5 text-[9px] opacity-90 leading-tight">
+                          Dugaan: <span className="font-semibold text-white">{plane.hangarDiagnosisResult.suspectedLabel}</span>
+                        </p>
+                        <p className="text-[9px] opacity-90 leading-tight">
+                          Temuan: <span className="font-semibold text-white">{plane.hangarDiagnosisResult.actualReason}</span>
+                        </p>
+                        {plane.hangarDiagnosisResult.secondaryReason && (
+                          <p className="text-[9px] text-amber-300 leading-tight mt-0.5">
+                            Cacat Sekunder: {plane.hangarDiagnosisResult.secondaryReason}
+                          </p>
+                        )}
+                      </div>
+                    ) : plane.suspectedAnomaly ? (
+                      <div className="mt-1.5 p-1.5 rounded bg-zinc-900 border border-zinc-700/70 text-[10px] text-zinc-300 font-mono">
+                        <span className="text-amber-400 font-bold">🔍 Dugaan Anomali ATC: </span>
+                        <span>
+                          {ANOMALY_OPTIONS.find((o) => o.id === plane.suspectedAnomaly)?.label || plane.suspectedAnomaly}
+                        </span>
+                        <p className="text-[9px] text-zinc-400 mt-0.5 italic">
+                          Mekanik akan memverifikasi kebenaran saat Overhaul dimulai.
+                        </p>
+                      </div>
+                    ) : plane.emergencyReason ? (
                       <p className="text-[10px] text-rose-300 italic font-mono mt-1 bg-rose-950/30 p-1 rounded border border-rose-900/40">
                         ⚠️ Anomali: {plane.emergencyReason}
                       </p>
-                    )}
+                    ) : null}
 
                     {plane.status === 'overhaul' && (
                       <div className="mt-1.5">
@@ -983,7 +1036,7 @@ export const TowerHUD: React.FC = () => {
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full">
                   {/* Button to open raw diagnostic statistics */}
                   <button
-                    onClick={() => setSelectedTechReportAircraftId(focusedAircraft.id)}
+                    onClick={() => setSelectedTechReportAircraftId(focusedAircraft.id, 'telemetry')}
                     className="flex-1 py-2 px-3 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-mono font-bold text-xs shadow-lg cursor-pointer transition-all flex items-center justify-center gap-2 animate-pulse"
                     title="Buka laporan telemetri teknisi untuk membaca statistik lengkap"
                   >
@@ -1002,12 +1055,12 @@ export const TowerHUD: React.FC = () => {
                     </button>
 
                     <button
-                      onClick={() => resolveTechVerdict(focusedAircraft.id, 'hangar')}
-                      className="py-2 px-3 rounded-lg bg-rose-700 hover:bg-rose-600 text-white font-mono font-bold text-xs border border-rose-500 cursor-pointer transition-all flex items-center gap-1.5"
-                      title="Tolak penerbangan & rujuk ke hanggar untuk perbaikan mendalam"
+                      onClick={() => setSelectedTechReportAircraftId(focusedAircraft.id, 'pick_anomaly')}
+                      className="py-2 px-3 rounded-lg bg-rose-700 hover:bg-rose-600 text-white font-mono font-bold text-xs border border-rose-500 cursor-pointer transition-all flex items-center gap-1.5 shadow-lg"
+                      title="Tolak penerbangan & pilih anomali yang dicurigai untuk dikirim ke hangar"
                     >
                       <Wrench className="w-4 h-4" />
-                      <span>🛠 DEREK KE HANGAR</span>
+                      <span>🛠 TOLAK & DEREK KE HANGAR</span>
                     </button>
                   </div>
                 </div>
@@ -1144,15 +1197,37 @@ export const TowerHUD: React.FC = () => {
                       }
                     }}
                     className={`p-1 rounded border ${
-                      focusedAircraft.emergencyReason
+                      focusedAircraft.hangarDiagnosisResult
+                        ? focusedAircraft.hangarDiagnosisResult.verdict === 'perfect'
+                          ? 'bg-emerald-950/60 border-emerald-400 text-emerald-200'
+                          : focusedAircraft.hangarDiagnosisResult.verdict === 'partial'
+                          ? 'bg-amber-950/60 border-amber-400 text-amber-200'
+                          : 'bg-rose-950/60 border-rose-400 text-rose-200'
+                        : focusedAircraft.suspectedAnomaly
+                        ? 'bg-zinc-800/80 border-amber-500/50 text-amber-300'
+                        : focusedAircraft.emergencyReason
                         ? 'bg-rose-950/40 border-rose-500/60 text-rose-300'
                         : 'bg-emerald-950/40 border-emerald-500/60 text-emerald-300'
                     } ${focusedAircraft.techReport ? 'cursor-pointer hover:border-amber-400' : ''}`}
-                    title={focusedAircraft.emergencyReason || 'Sistem Diperiksa Teknis'}
+                    title={
+                      focusedAircraft.hangarDiagnosisResult
+                        ? focusedAircraft.hangarDiagnosisResult.message
+                        : focusedAircraft.emergencyReason || 'Sistem Diperiksa Teknis'
+                    }
                   >
                     <span className="block font-bold">2. Diagnosa</span>
                     <span className="truncate block">
-                      {focusedAircraft.emergencyReason ? '⚠️ Ada Cacat' : '✓ Diinspeksi'}
+                      {focusedAircraft.hangarDiagnosisResult
+                        ? focusedAircraft.hangarDiagnosisResult.verdict === 'perfect'
+                          ? '🏆 Tepat (+150)'
+                          : focusedAircraft.hangarDiagnosisResult.verdict === 'partial'
+                          ? '⚡ Sebagian (+40)'
+                          : '❌ Salah (-80)'
+                        : focusedAircraft.suspectedAnomaly
+                        ? '🔍 Diduga'
+                        : focusedAircraft.emergencyReason
+                        ? '⚠️ Ada Cacat'
+                        : '✓ Diinspeksi'}
                     </span>
                   </div>
 

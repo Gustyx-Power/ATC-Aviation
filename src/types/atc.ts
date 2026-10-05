@@ -55,6 +55,19 @@ export type PendingClearanceType =
   | 'c_check'
   | 'hangar_release';
 
+export type TechAnomalyCategory =
+  | 'hydraulic'
+  | 'engine_vibe'
+  | 'egt_thermal'
+  | 'oil_pressure'
+  | 'landing_gear'
+  | 'brakes'
+  | 'pitot_heat'
+  | 'transponder'
+  | 'fuel_water'
+  | 'apu_bleed'
+  | 'unspecified_caution';
+
 export interface AircraftTechReport {
   timestamp: string;
   inspector: string;
@@ -80,7 +93,10 @@ export interface AircraftTechReport {
   inspectorNotes: string;
   // Ground truth evaluation (hidden from player)
   isDefective: boolean;
+  primaryDefect?: TechAnomalyCategory;
+  secondaryDefect?: TechAnomalyCategory;
   defectReason?: string;
+  secondaryDefectReason?: string;
 }
 
 export interface Aircraft {
@@ -139,6 +155,16 @@ export interface Aircraft {
     cCheckPassed?: boolean;
   };
   techReport?: AircraftTechReport;
+  suspectedAnomaly?: TechAnomalyCategory;
+  hangarDiagnosisResult?: {
+    verdict: 'perfect' | 'partial' | 'wrong';
+    suspectedLabel: string;
+    actualReason: string;
+    secondaryReason?: string;
+    message: string;
+    scoreChange: number;
+    airMilesChange: number;
+  };
 }
 
 export interface Runway {
@@ -253,8 +279,9 @@ export interface GameState {
 
   // Technical Telemetry & Engineer Report
   selectedTechReportAircraftId: string | null;
-  setSelectedTechReportAircraftId: (id: string | null) => void;
-  resolveTechVerdict: (id: string, decision: 'airworthy' | 'hangar') => void;
+  techReportModalView?: 'telemetry' | 'pick_anomaly';
+  setSelectedTechReportAircraftId: (id: string | null, view?: 'telemetry' | 'pick_anomaly') => void;
+  resolveTechVerdict: (id: string, decision: 'airworthy' | 'hangar', suspectedAnomaly?: TechAnomalyCategory) => void;
 
   // View & UI
   setViewMode: (mode: ViewMode) => void;

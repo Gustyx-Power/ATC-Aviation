@@ -1,8 +1,8 @@
 import { create } from 'zustand'
-import type { Aircraft, AircraftStatus, CommLogItem, GameState, RadioChannel, ViewMode, Waypoint, WeatherCondition } from '../types/atc'
+import type { Aircraft, AircraftStatus, CommLogItem, GameState, RadioChannel, ViewMode, Waypoint, WeatherCondition, TechAnomalyCategory } from '../types/atc'
 import { generateRandomAircraft } from '../utils/aircraftSpawner'
 import { radioSound } from '../utils/audioEffects'
-import { generateTechReport } from '../utils/techDiagnostics'
+import { generateTechReport, ANOMALY_OPTIONS } from '../utils/techDiagnostics'
 
 const DEFAULT_CENTER = { x: 450, y: 350 }
 const DEFAULT_RADIUS = 280
@@ -143,7 +143,9 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
   emergencyServicesActive: false,
   selectedTechReportAircraftId: null,
-  setSelectedTechReportAircraftId: (id: string | null) => set({ selectedTechReportAircraftId: id }),
+  techReportModalView: 'telemetry' as 'telemetry' | 'pick_anomaly',
+  setSelectedTechReportAircraftId: (id: string | null, view: 'telemetry' | 'pick_anomaly' = 'telemetry') =>
+    set({ selectedTechReportAircraftId: id, techReportModalView: view }),
 
   approveClearance: (id: string) => {
     const ac = get().aircrafts.find((a) => a.id === id)
@@ -205,7 +207,8 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (ac.status === 'approach' || ac.pendingClearance === 'landing') {
       get().orderHoldInAir(id)
     } else if (ac.pendingClearance === 'tech_verdict') {
-      get().resolveTechVerdict(id, 'hangar')
+      get().setSelectedTechReportAircraftId(id, 'pick_anomaly')
+      return
     } else {
       atcInstruction(`${id}, negative clearance at this time, maintain current position.`)
       pilotReadback(`${id}, clearance denied by ATC, holding position, standing by.`)
@@ -461,7 +464,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     }))
   },
 
-  resolveTechVerdict: (id: string, decision: 'airworthy' | 'hangar') => {
+  resolveTechVerdict: (id: string, decision: 'airworthy' | 'hangar', suspectedAnomaly?: TechAnomalyCategory) => {
     const ac = get().aircrafts.find((a) => a.id === id)
     if (!ac) return
     radioSound.playRogerBeep()
@@ -542,74 +545,45 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
     } else {
       // ATC rejects flight clearance and routes to Hangar for maintenance
-      atcInstruction(`${id}, technical data review rejected, hold boarding, ground tug taxi to Hangar 1.`)
-      radioSound.speakGroundCrewVoice(`${id}, copied Tower. Holding boarding, ground tug towing aircraft to Hangar 1.`)
+      const suspected = suspectedAnomaly || 'unspecified_caution'
+      const suspectedOption = ANOMALY_OPTIONS.find((o) => o.id === suspected)
+      const suspectName = suspectedOption ? suspectedOption.label : 'Pemeriksaan Lanjutan'
 
-      if (isDefective) {
-        // Player successfully caught the defect!
-        const successMsg: CommLogItem = {
-          id: `tech-verdict-${Date.now()}`,
-          timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
-          sender: 'SYSTEM',
-          callsign: id,
-          message: `🏆 KEPUTUSAN CEMERLANG ATC: Anda jeli mendeteksi anomali (${report.defectReason}) pada ${id}! Potensi insiden di udara berhasil dicegah (+40 Mil Udara & Poin Keselamatan).`,
-          type: 'info',
-        }
-        set((state) => ({
-          airMiles: state.airMiles + 40,
-          score: state.score + 100,
-          aircrafts: state.aircrafts.map((a) =>
-            a.id === id
-              ? {
-                  ...a,
-                  status: 'taxi_to_hangar',
-                  assignedGate: 'Hangar 1',
-                  gate: 'Hangar 1',
-                  pendingClearance: undefined,
-                  pendingClearanceTitle: undefined,
-                  turnaround: {
-                    ...(a.turnaround || {}),
-                    techInspected: true,
-                  },
-                }
-              : a
-          ),
-          commsLog: [...state.commsLog, successMsg].slice(-50),
-          selectedTechReportAircraftId: null,
-          tutorialText: `${id} sedang ditarik menuju Hangar 1 untuk perbaikan mendalam.`,
-        }))
-      } else {
-        // Player was overly cautious on a healthy plane
-        const cautionMsg: CommLogItem = {
-          id: `tech-verdict-${Date.now()}`,
-          timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
-          sender: 'SYSTEM',
-          callsign: id,
-          message: `LAPORAN TEKNISI HANGAR: Inspeksi ulang membuktikan seluruh sistem ${id} sebenarnya dalam batas toleransi normal. Pesawat disiapkan kembali (+5 Mil Udara prosedur kehati-hatian).`,
-          type: 'info',
-        }
-        set((state) => ({
-          airMiles: state.airMiles + 5,
-          aircrafts: state.aircrafts.map((a) =>
-            a.id === id
-              ? {
-                  ...a,
-                  status: 'taxi_to_hangar',
-                  assignedGate: 'Hangar 1',
-                  gate: 'Hangar 1',
-                  pendingClearance: undefined,
-                  pendingClearanceTitle: undefined,
-                  turnaround: {
-                    ...(a.turnaround || {}),
-                    techInspected: true,
-                  },
-                }
-              : a
-          ),
-          commsLog: [...state.commsLog, cautionMsg].slice(-50),
-          selectedTechReportAircraftId: null,
-        }))
+      atcInstruction(`${id}, technical data review rejected, suspecting ${suspectName}. Hold boarding, ground tug taxi to Hangar 1.`)
+      radioSound.speakGroundCrewVoice(`${id}, copied Tower. Holding boarding, ground tug towing aircraft to Hangar 1. Hangar engineering team will inspect ${suspectName} during overhaul.`)
+
+      const rejectMsg: CommLogItem = {
+        id: `tech-verdict-${Date.now()}`,
+        timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
+        sender: 'ATC' as const,
+        callsign: id,
+        message: `RUJUKAN HANGAR: ${id} ditolak izin terbangnya karena dugaan Menara: "${suspectName}". Pesawat diderek ke Hangar 1 untuk investigasi pembongkaran.`,
+        type: 'command',
       }
+
+      set((state) => ({
+        aircrafts: state.aircrafts.map((a) =>
+          a.id === id
+            ? {
+                ...a,
+                status: 'taxi_to_hangar',
+                assignedGate: 'Hangar 1',
+                gate: 'Hangar 1',
+                suspectedAnomaly: suspected,
+                emergencyReason: report.defectReason || `Dugaan: ${suspectName}`,
+                pendingClearance: undefined,
+                pendingClearanceTitle: undefined,
+                turnaround: {
+                  ...(a.turnaround || {}),
+                  techInspected: true,
+                },
+              }
+            : a
+        ),
+        commsLog: [...state.commsLog, rejectMsg].slice(-50),
+        selectedTechReportAircraftId: null,
+        tutorialText: `${id} sedang ditarik menuju Hangar 1. Teknisi akan membongkar komponen ${suspectName} dan mengevaluasi diagnosa Anda saat overhaul!`,
+      }))
     }
   },
 
@@ -916,21 +890,93 @@ export const useGameStore = create<GameState>((set, get) => ({
   startEngineOverhaul: (id: string) => {
     radioSound.playRogerBeep()
     const ac = get().aircrafts.find((a) => a.id === id)
-    const defectInfo = ac?.emergencyReason ? ` (${ac.emergencyReason})` : ''
-    atcInstruction(`${id}, heavy overhaul and component repair approved in Hangar.`)
-    radioSound.speakGroundCrewVoice(`${id}, copied Tower. Hangar team commencing turbofan core overhaul and component replacement.`)
+    if (!ac) return
+
+    const report = ac.techReport || generateTechReport(ac)
+    const suspected = ac.suspectedAnomaly || 'unspecified_caution'
+    const suspectedOption = ANOMALY_OPTIONS.find((o) => o.id === suspected)
+    const suspectLabel = suspectedOption ? suspectedOption.label : 'Pemeriksaan Umum'
+
+    let verdict: 'perfect' | 'partial' | 'wrong' = 'wrong'
+    let scoreDelta = 0
+    let milesDelta = 0
+    let techSpeech = ''
+    let logMessage = ''
+    let logType: 'info' | 'alert' = 'info'
+
+    const matchesPrimary = report.isDefective && report.primaryDefect === suspected
+    const matchesSecondary = report.isDefective && report.secondaryDefect && report.secondaryDefect === suspected
+
+    if (matchesPrimary || matchesSecondary) {
+      const hasUncaughtSecondary =
+        (matchesPrimary && !!report.secondaryDefect) ||
+        (matchesSecondary && !!report.primaryDefect)
+
+      if (hasUncaughtSecondary) {
+        // Case B: Benar Sebagian (Correct defect caught, but missed another anomaly on report)
+        verdict = 'partial'
+        scoreDelta = 40
+        milesDelta = 15
+        const secondaryTxt = report.secondaryDefectReason || report.defectReason || 'anomali sekunder'
+        techSpeech = `Tower, Hangar Chief on ${id}. Teardown confirms your diagnosis of ${suspectLabel}! However, our team also discovered a secondary defect you missed: ${secondaryTxt}. Good catch, but check all parameters closely. Small reward granted.`
+        logMessage = `⚡ DIAGNOSA BENAR SEBAGIAN: Dugaan Menara tepat pada ${suspectLabel} (${report.defectReason || ''})! Namun mekanik juga mendapati cacat tambahan: ${secondaryTxt}. (+15 Mil Udara, +40 Skor).`
+        logType = 'info'
+      } else {
+        // Case A: Benar & Tepat (100% accurate, praised by technician)
+        verdict = 'perfect'
+        scoreDelta = 150
+        milesDelta = 60
+        techSpeech = `Tower, Hangar Chief on ${id}! Outstanding call! Disassembly confirms severe anomaly on ${suspectLabel}: ${report.defectReason || 'Internal failure'}. No other hidden defects found. You prevented a potential catastrophic incident in flight! Highest commendations!`
+        logMessage = `🏆 PUJIAN TEKNISI HANGAR: Diagnosa ATC sangat presisi! Komponen ${suspectLabel} mengalami kerusakan kritis (${report.defectReason}). Potensi insiden fatal berhasil dicegah! (+60 Mil Udara, +150 Skor).`
+        logType = 'info'
+      }
+    } else {
+      // Case C: Salah Vonis / False Accusation (Penalty)
+      verdict = 'wrong'
+      scoreDelta = -80
+      milesDelta = -30
+      if (!report.isDefective) {
+        techSpeech = `Tower, Hangar Chief on ${id}. We completely dismantled the ${suspectLabel} system. All tolerances and pressures are 100% factory spec! The aircraft was perfectly healthy and grounded unnecessarily, disrupting flight schedules. Penalty recorded against tower!`
+        logMessage = `❌ SANKSI SALAH DIAGNOSA ATC: Pembongkaran membuktikan seluruh sistem ${id} termasuk ${suspectLabel} 100% normal dan layak terbang! Grounding tidak berdasar merugikan maskapai (-30 Mil Udara, -80 Skor).`
+      } else {
+        techSpeech = `Tower, Hangar Chief on ${id}. We inspected ${suspectLabel} as requested, but found zero defects. However, our mechanics uncovered the actual defect: ${report.defectReason || 'sistem lain'}. Your diagnosis missed the real threat. Penalty applied for inaccurate analysis!`
+        logMessage = `❌ SANKSI SALAH DIAGNOSA ATC: Anda menduga anomali ${suspectLabel} yang ternyata normal! Kerusakan sebenarnya adalah: ${report.defectReason || 'komponen lain'}. (-30 Mil Udara, -80 Skor).`
+      }
+      logType = 'alert'
+    }
+
+    // Only apply score / airMiles delta if not previously evaluated on this plane
+    const alreadyEvaluated = !!ac.hangarDiagnosisResult
+    const finalScoreDelta = alreadyEvaluated ? 0 : scoreDelta
+    const finalMilesDelta = alreadyEvaluated ? 0 : milesDelta
+
+    atcInstruction(`${id}, heavy overhaul work order authorized in Hangar. Teardown report requested.`)
+    radioSound.speakGroundCrewVoice(techSpeech)
+
+    const diagnosisResult = {
+      verdict,
+      suspectedLabel: suspectLabel,
+      actualReason: report.defectReason || 'Seluruh sistem dalam toleransi normal pabrikan',
+      secondaryReason: report.secondaryDefectReason,
+      message: logMessage,
+      scoreChange: scoreDelta,
+      airMilesChange: milesDelta,
+    }
 
     set((state) => ({
-      aircrafts: state.aircrafts.map((ac) =>
-        ac.id === id
+      score: Math.max(0, state.score + finalScoreDelta),
+      airMiles: Math.max(0, state.airMiles + finalMilesDelta),
+      aircrafts: state.aircrafts.map((a) =>
+        a.id === id
           ? {
-              ...ac,
+              ...a,
               status: 'overhaul',
               serviceProgress: 0,
               pendingClearance: undefined,
               pendingClearanceTitle: undefined,
+              hangarDiagnosisResult: diagnosisResult,
             }
-          : ac
+          : a
       ),
       commsLog: [
         ...state.commsLog,
@@ -939,11 +985,17 @@ export const useGameStore = create<GameState>((set, get) => ({
           timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
           sender: 'GROUND_CREW' as const,
           callsign: id,
-          message: `Tim mekanik hangar memulai overhaul sistem dan penggantian suku cadang pada ${id}${defectInfo}.`,
-          type: 'info' as const,
+          message: logMessage,
+          type: logType,
         },
       ].slice(-50),
-      tutorialText: `Sistem ${id} sedang di-overhaul di hangar. Teknisi sedang membongkar dan mengganti komponen!`,
+      tutorialText: `[OVERHAUL ${id}] ${
+        verdict === 'perfect'
+          ? '🏆 Pujian teknisi: Diagnosa Anda 100% tepat! Komponen rusak diganti baru.'
+          : verdict === 'partial'
+          ? '⚡ Diagnosa benar sebagian, ada cacat lain terlewat! Teknisi memperbaiki keduanya.'
+          : '❌ Sanksi: Salah vonis komponen! Teknisi merakit kembali sesuai spek.'
+      }`,
     }))
   },
 
